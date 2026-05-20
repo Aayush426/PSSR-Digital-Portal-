@@ -1,7 +1,7 @@
 import React from 'react';
 import { NAV_ITEMS } from '../../constants/navigation';
-import { logout } from '../../utils/auth';
 import { LogOut } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface SidebarProps {
   currentPath: string;
@@ -9,6 +9,8 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ currentPath, onNavigate }) => {
+  const { logout } = useAuth();
+
   return (
     <aside className="w-60 bg-surface-container-low border-r border-outline-variant flex flex-col h-screen fixed left-0 top-0 overflow-y-auto custom-scrollbar">
       <div className="p-6">
@@ -38,7 +40,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPath, onNavigate }) => 
 
       <div className="p-4 border-t border-outline-variant bg-surface-container-lowest space-y-2">
         <button 
-          onClick={logout}
+          onClick={() => void logout()}
           className="w-full flex items-center px-4 py-2 text-[10px] font-black uppercase text-error hover:bg-error/5 rounded transition-all tracking-widest"
         >
           <LogOut className="w-3.5 h-3.5 mr-3" />

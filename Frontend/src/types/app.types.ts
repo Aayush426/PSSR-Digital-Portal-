@@ -1,5 +1,5 @@
 
-export type UserRole = 'Admin' | 'Team Member' | 'PSSR Initiator' | 'Area Owner';
+export type UserRole = 'Admin' | 'Team Member' | 'Area Owner';
 
 export interface User {
   id: string;

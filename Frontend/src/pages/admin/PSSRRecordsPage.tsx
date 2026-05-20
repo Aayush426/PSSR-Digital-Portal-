@@ -1,7 +1,9 @@
 import React from 'react';
 import { PageTitle, StatusBadge } from '../../components/shared/UIItems';
-import { MOCK_PSSR_RECORDS } from '../../constants/mockData';
 import { Plus, Download, Filter, MoreVertical, Eye, FileText } from 'lucide-react';
+import type { PSSRRecord } from '../../types/app.types';
+
+const LIVE_PSSR_RECORDS: PSSRRecord[] = [];
 
 export const PSSRRecordsPage: React.FC = () => {
   return (
@@ -60,7 +62,7 @@ export const PSSRRecordsPage: React.FC = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-outline-variant">
-            {MOCK_PSSR_RECORDS.map((record) => (
+            {LIVE_PSSR_RECORDS.map((record) => (
               <tr key={record.id} className="hover:bg-surface-container-low transition-colors">
                 <td className="px-4 py-4 text-body-sm font-black text-primary font-mono">{record.id}</td>
                 <td className="px-4 py-4 text-body-sm font-bold text-on-surface">{record.unit}</td>
@@ -89,6 +91,14 @@ export const PSSRRecordsPage: React.FC = () => {
             ))}
           </tbody>
         </table>
+        {LIVE_PSSR_RECORDS.length === 0 && (
+          <div className="p-8 text-center border-t border-outline-variant">
+            <p className="text-headline-sm font-black text-on-surface">No live PSSR records available</p>
+            <p className="text-body-sm text-on-surface-variant mt-2">
+              Workflow records will populate from the backend PSSR module when commissioning workflows are enabled.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

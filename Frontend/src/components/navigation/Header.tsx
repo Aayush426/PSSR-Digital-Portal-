@@ -24,7 +24,7 @@ export const Header: React.FC = () => {
           </button>
           <div className="flex items-center space-x-2 pl-4 border-l border-outline-variant">
             <div className="text-right hidden md:block">
-              <p className="text-[11px] font-bold text-on-surface leading-none">John Doe</p>
+              <p className="text-[11px] font-bold text-on-surface leading-none">Admin</p>
               <p className="text-[9px] text-on-surface-variant uppercase tracking-tighter">System Admin</p>
             </div>
             <div className="w-7 h-7 bg-secondary-container rounded flex items-center justify-center border border-outline-variant">

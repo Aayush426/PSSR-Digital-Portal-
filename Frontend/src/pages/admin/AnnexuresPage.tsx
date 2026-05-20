@@ -1,7 +1,9 @@
 import React from 'react';
 import { PageTitle, StatusBadge } from '../../components/shared/UIItems';
-import { MOCK_ANNEXURES } from '../../constants/mockData';
-import { Upload, Search, Download, Edit2, MoreVertical, FileArchive } from 'lucide-react';
+import { Upload, Search, Download, MoreVertical, FileArchive } from 'lucide-react';
+import type { Annexure } from '../../types/app.types';
+
+const LIVE_ANNEXURES: Annexure[] = [];
 
 export const AnnexuresPage: React.FC = () => {
   return (
@@ -80,7 +82,7 @@ export const AnnexuresPage: React.FC = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-outline-variant">
-            {MOCK_ANNEXURES.map((item) => (
+            {LIVE_ANNEXURES.map((item) => (
               <tr key={item.id} className="hover:bg-surface-container-low transition-colors">
                 <td className="px-6 py-4 text-body-sm font-bold text-on-surface">{item.name}</td>
                 <td className="px-6 py-4 font-mono text-[11px] text-primary font-black uppercase tracking-tighter">{item.version}</td>
@@ -108,6 +110,14 @@ export const AnnexuresPage: React.FC = () => {
             ))}
           </tbody>
         </table>
+        {LIVE_ANNEXURES.length === 0 && (
+          <div className="p-8 text-center border-t border-outline-variant">
+            <p className="text-headline-sm font-black text-on-surface">No live annexure records available</p>
+            <p className="text-body-sm text-on-surface-variant mt-2">
+              Annexure data will be loaded from the backend document-control service when enabled.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

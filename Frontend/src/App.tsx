@@ -1,42 +1,60 @@
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { AdminLayout } from './layouts/AdminLayout';
 import { LoginPage } from './pages/auth/LoginPage';
-import { isAuthenticated } from './utils/auth';
+import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { GlobalAppLoader, RouteSkeleton } from './components/shared/Skeleton';
+import { useAuth } from './contexts/AuthContext';
 
-// Pages
-import { DashboardPage } from './pages/admin/DashboardPage';
-import { UsersPage } from './pages/admin/UsersPage';
-import { RolesPermissionsPage } from './pages/admin/RolesPermissionsPage';
-import { DepartmentsPage } from './pages/admin/DepartmentsPage';
-import { AnnexuresPage } from './pages/admin/AnnexuresPage';
-import { WorkflowConfigurationPage } from './pages/admin/WorkflowConfigurationPage';
-import { PSSRRecordsPage } from './pages/admin/PSSRRecordsPage';
-import { ReportsPage } from './pages/admin/ReportsPage';
-import { AuditLogsPage } from './pages/admin/AuditLogsPage';
-import { SettingsPage } from './pages/admin/SettingsPage';
+const DashboardPage = lazy(() => import('./pages/admin/DashboardPage').then((module) => ({ default: module.DashboardPage })));
+const UsersPage = lazy(() => import('./pages/admin/UsersPage').then((module) => ({ default: module.UsersPage })));
+const RolesPermissionsPage = lazy(() => import('./pages/admin/RolesPermissionsPage').then((module) => ({ default: module.RolesPermissionsPage })));
+const DepartmentsPage = lazy(() => import('./pages/admin/DepartmentsPage').then((module) => ({ default: module.DepartmentsPage })));
+const AnnexuresPage = lazy(() => import('./pages/admin/AnnexuresPage').then((module) => ({ default: module.AnnexuresPage })));
+const WorkflowConfigurationPage = lazy(() => import('./pages/admin/WorkflowConfigurationPage').then((module) => ({ default: module.WorkflowConfigurationPage })));
+const PSSRRecordsPage = lazy(() => import('./pages/admin/PSSRRecordsPage').then((module) => ({ default: module.PSSRRecordsPage })));
+const ReportsPage = lazy(() => import('./pages/admin/ReportsPage').then((module) => ({ default: module.ReportsPage })));
+const AuditLogsPage = lazy(() => import('./pages/admin/AuditLogsPage').then((module) => ({ default: module.AuditLogsPage })));
+const SettingsPage = lazy(() => import('./pages/admin/SettingsPage').then((module) => ({ default: module.SettingsPage })));
+const TeamDashboardPage = lazy(() => import('./pages/team/DashboardPage').then((module) => ({ default: module.TeamDashboardPage })));
+const AreaOwnerDashboardPage = lazy(() => import('./pages/area-owner/DashboardPage').then((module) => ({ default: module.AreaOwnerDashboardPage })));
 
+/**
+ * Lightweight route shell with lazy-loaded pages.
+ *
+ * Route-level Suspense lets the shell stay visible while heavier modules load.
+ * That mirrors enterprise refinery systems where navigation chrome should not
+ * disappear during route transitions or code-split downloads.
+ */
 export default function App() {
-  const [isAuth, setIsAuth] = useState<boolean | null>(null);
-  const [currentPath, setCurrentPath] = useState('/admin/dashboard');
+  const { user, loading } = useAuth();
+  const [currentPath, setCurrentPath] = useState(window.location.pathname);
 
   useEffect(() => {
-    // Initial check on mount
-    setIsAuth(isAuthenticated());
+    const onPopState = () => setCurrentPath(window.location.pathname);
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
-  const handleLogin = () => {
-    setIsAuth(true);
-    setCurrentPath('/admin/dashboard');
+  useEffect(() => {
+    if (!loading && user && (currentPath === '/' || currentPath === '/login')) {
+      navigate(user.dashboard_path);
+    }
+  }, [currentPath, loading, user]);
+
+  const navigate = (path: string) => {
+    window.history.pushState({}, '', path);
+    setCurrentPath(path);
   };
 
-  // While checking auth state, show nothing or a tiny loader to prevent flicker
-  if (isAuth === null) return null;
-
-  if (!isAuth) {
-    return <LoginPage onLogin={handleLogin} />;
+  if (loading) {
+    return <GlobalAppLoader />;
   }
 
-  const renderContent = () => {
+  if (!user) {
+    return <LoginPage />;
+  }
+
+  const renderAdminContent = () => {
     switch (currentPath) {
       case '/admin/dashboard': return <DashboardPage />;
       case '/admin/users': return <UsersPage />;
@@ -52,9 +70,33 @@ export default function App() {
     }
   };
 
+  if (currentPath.startsWith('/team')) {
+    return (
+      <ProtectedRoute allowedRoles={['TEAM_MEMBER']}>
+        <Suspense fallback={<RouteSkeleton />}>
+          <TeamDashboardPage />
+        </Suspense>
+      </ProtectedRoute>
+    );
+  }
+
+  if (currentPath.startsWith('/area-owner')) {
+    return (
+      <ProtectedRoute allowedRoles={['AREA_OWNER']}>
+        <Suspense fallback={<RouteSkeleton />}>
+          <AreaOwnerDashboardPage />
+        </Suspense>
+      </ProtectedRoute>
+    );
+  }
+
   return (
-    <AdminLayout currentPath={currentPath} onNavigate={setCurrentPath}>
-      {renderContent()}
-    </AdminLayout>
+    <ProtectedRoute allowedRoles={['ADMIN']}>
+      <AdminLayout currentPath={currentPath} onNavigate={navigate}>
+        <Suspense fallback={<RouteSkeleton />}>
+          {renderAdminContent()}
+        </Suspense>
+      </AdminLayout>
+    </ProtectedRoute>
   );
 }

@@ -1,7 +1,76 @@
-node_modules
-dist
-playwright-report
-test-results
+
+# NODE / FRONTEND
+
+
+node_modules/
+dist/
+coverage/
+.playwright/
+playwright-report/
+test-results/
+
+# PYTHON / BACKEND
+
+
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+
+# ENVIRONMENT FILES
+
+
 .env
-coverage
+.env.local
+.env.development
+.env.production
+
+
+# DATABASES
+
+
+*.db
+*.sqlite3
+
+
+# LOGS
+
+
+*.log
+
+
+# OS FILES
+
+
 .DS_Store
+Thumbs.db
+
+# IDE / EDITOR
+
+
+.vscode/
+.idea/
+
+
+# BUILD FILES
+
+
+build/
+out/
+
+# CACHE
+
+
+.cache/
+.pytest_cache/
+.mypy_cache/
+
+
+# TEMP FILES
+
+
+tmp/
+temp/

@@ -1,7 +1,9 @@
 import React from 'react';
 import { PageTitle, StatusBadge } from '../../components/shared/UIItems';
-import { MOCK_DEPARTMENTS } from '../../constants/mockData';
 import { Plus, Search, MoreVertical, Edit2 } from 'lucide-react';
+import type { Department } from '../../types/app.types';
+
+const LIVE_DEPARTMENTS: Department[] = [];
 
 export const DepartmentsPage: React.FC = () => {
   return (
@@ -46,7 +48,7 @@ export const DepartmentsPage: React.FC = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-outline-variant">
-            {MOCK_DEPARTMENTS.map((dept) => (
+            {LIVE_DEPARTMENTS.map((dept) => (
               <tr key={dept.id} className="hover:bg-surface-container-low transition-colors">
                 <td className="px-6 py-4 text-body-md font-bold text-on-surface uppercase">{dept.name}</td>
                 <td className="px-6 py-4 text-body-sm font-mono text-primary font-bold">{dept.code}</td>
@@ -74,6 +76,14 @@ export const DepartmentsPage: React.FC = () => {
             ))}
           </tbody>
         </table>
+        {LIVE_DEPARTMENTS.length === 0 && (
+          <div className="p-8 text-center border-t border-outline-variant">
+            <p className="text-headline-sm font-black text-on-surface">No live department records available</p>
+            <p className="text-body-sm text-on-surface-variant mt-2">
+              Department records will be loaded from backend refinery structure APIs when enabled.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

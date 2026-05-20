@@ -1,7 +1,7 @@
 import React from 'react';
 import { PageTitle } from '../../components/shared/UIItems';
 import { PieChart, Download, FileSpreadsheet, FileBarChart, Filter, RefreshCw } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 
 export const ReportsPage: React.FC = () => {
   const reportCategories = [

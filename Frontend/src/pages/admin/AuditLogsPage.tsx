@@ -1,8 +1,10 @@
 import React from 'react';
 import { PageTitle } from '../../components/shared/UIItems';
 import { AuditLogsTable } from '../../components/tables/AuditLogsTable';
-import { MOCK_AUDIT_LOGS } from '../../constants/mockData';
 import { Search, Download, Calendar } from 'lucide-react';
+import type { AuditLog } from '../../types/app.types';
+
+const LIVE_AUDIT_LOGS: AuditLog[] = [];
 
 export const AuditLogsPage: React.FC = () => {
   return (
@@ -55,7 +57,16 @@ export const AuditLogsPage: React.FC = () => {
         </p>
       </div>
 
-      <AuditLogsTable logs={MOCK_AUDIT_LOGS} />
+      {LIVE_AUDIT_LOGS.length > 0 ? (
+        <AuditLogsTable logs={LIVE_AUDIT_LOGS} />
+      ) : (
+        <div className="bg-surface-container-lowest border border-outline-variant rounded p-8 text-center">
+          <p className="text-headline-sm font-black text-on-surface">No live audit records available</p>
+          <p className="text-body-sm text-on-surface-variant mt-2">
+            Audit trails will populate from the backend audit service when that module is enabled.
+          </p>
+        </div>
+      )}
     </div>
   );
 };

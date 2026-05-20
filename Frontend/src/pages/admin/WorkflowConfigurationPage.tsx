@@ -1,11 +1,11 @@
 import React from 'react';
 import { PageTitle } from '../../components/shared/UIItems';
 import { GitBranch, UserCheck, ShieldCheck, Mail, Save, Plus } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 
 export const WorkflowConfigurationPage: React.FC = () => {
   const workflowStages = [
-    { id: 1, name: 'PSSR Initiation', actor: 'PSSR Initiator', mandatory: true, duration: '24h' },
+    { id: 1, name: 'PSSR Initiation', actor: 'Assigned Team Member', mandatory: true, duration: '24h' },
     { id: 2, name: 'Technical Review', actor: 'Subject Matter Expert', mandatory: true, duration: '48h' },
     { id: 3, name: 'Site Safety Audit', actor: 'Safety Inspector', mandatory: true, duration: '72h' },
     { id: 4, name: 'Area Handover', actor: 'Area Owner', mandatory: true, duration: '24h' },

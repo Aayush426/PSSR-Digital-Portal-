@@ -10,7 +10,7 @@ export const RolesPermissionsPage: React.FC = () => {
     { id: 'audit', name: 'Audit Access', permissions: ['Read', 'Export', 'Clear'] },
   ];
 
-  const roles = ['Admin', 'Team Member', 'PSSR Initiator', 'Area Owner'];
+  const roles = ['Admin', 'Team Member', 'Area Owner'];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -53,7 +53,7 @@ export const RolesPermissionsPage: React.FC = () => {
                   <tr key={perm} className="hover:bg-surface-container-low transition-colors">
                     <td className="px-8 py-3 text-body-sm text-on-surface-variant font-medium">{perm}</td>
                     {roles.map(role => {
-                      const hasAccess = Math.random() > 0.4; // Simulation
+                      const hasAccess = getPolicyAccess(role, module.id, perm);
                       return (
                         <td key={role} className="px-6 py-3 text-center">
                           <div className="flex justify-center">
@@ -90,3 +90,18 @@ export const RolesPermissionsPage: React.FC = () => {
     </div>
   );
 };
+
+function getPolicyAccess(role: string, moduleId: string, permission: string): boolean {
+  /**
+   * Deterministic policy projection for the current RBAC model.
+   *
+   * PSSR initiator is intentionally absent here because it is dynamic assignment
+   * state for TEAM_MEMBER users, not a permanent role in the identity model.
+   */
+  if (role === 'Admin') return true;
+  if (role === 'Area Owner') return ['Read', 'Approve', 'Export'].includes(permission);
+  if (role === 'Team Member') {
+    return moduleId === 'pssr' && ['Create', 'Read'].includes(permission);
+  }
+  return false;
+}

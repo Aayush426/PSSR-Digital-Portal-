@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { InputField, PasswordField, AuthButton } from '../../components/auth/AuthUI';
 import { Mail, Lock, ShieldCheck, Cpu } from 'lucide-react';
-import { validateAdmin, login } from '../../utils/auth';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
+import { useAuth } from '../../contexts/AuthContext';
+import { routeUserToDashboard } from '../../components/auth/RoleRouter';
 
-export const LoginPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
+export const LoginPage: React.FC = () => {
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -16,16 +18,17 @@ export const LoginPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
     setError(null);
     setLoading(true);
 
-    // Simulate network latency for enterprise handshake feel
-    setTimeout(() => {
-      if (validateAdmin(email, password)) {
-        login(email);
-        onLogin();
-      } else {
-        setError('ACCESS_DENIED: Invalid Credentials or Insufficient Privileges.');
-        setLoading(false);
-      }
-    }, 1200);
+    try {
+      const user = await login(email, password);
+      routeUserToDashboard(user);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'ACCESS_DENIED: Invalid credentials or insufficient privileges.'
+      );
+      setLoading(false);
+    }
   };
 
   return (
@@ -68,6 +71,7 @@ export const LoginPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              icon={<Lock size={16} />}
               required
               disabled={loading}
             />

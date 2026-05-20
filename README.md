@@ -1,51 +1,202 @@
 # Digital PSSR Portal
 
-High-end digital Pre Startup Safety Review (PSSR) portal created to manage the workflow within the refinery.
+Enterprise-grade Digital Pre Startup Safety Review (PSSR) platform designed for refinery and industrial operations environments.
 
-## Current Module
+The platform digitizes and standardizes the complete PSSR lifecycle including personnel authorization, workflow approvals, safety verification, auditability, operational documentation, and department-level coordination.
 
-Module 1 - Frontend Framework & Admin Portal Architecture
+Built with a scalable enterprise architecture using React, FastAPI, PostgreSQL, and RBAC-driven access control.
 
-## Features Included
+---
 
-* Enterprise admin dashboard
-* Planning of Role based architecture
-* Authentication utility library
-* Departments module management UI
-* Sidebar navigation module
-* Manual QA documentation
-* Smoke testing with Playwright framework
-* Scalable frontend framework
+# Enterprise Objectives
 
-## Tech Stack
+The Digital PSSR Portal is being developed to solve operational and compliance challenges in industrial refinery environments by providing:
 
-* React 19
-* TypeScript
-* Vite
-* Tailwind CSS v4
-* Playwright
-* Lucide React
-* Framer Motion
+- Centralized PSSR workflow management
+- Enterprise-grade role-based authorization
+- Secure authentication and session handling
+- Department-level operational visibility
+- Audit logging and traceability
+- Scalable process automation
+- Cross-functional refinery coordination
+- Future-ready DevSecOps deployment architecture
 
-## Directory Structure
+---
 
-* Frontend/
-* docs/
-* test/
-* architecture/
-* QA documentation
+# Current Development Status
 
-## Current Development State
+## Phase 1 Completed
+### Enterprise Frontend + Backend Foundation
 
-Frontend architecture and manual QA setup complete.
+The project currently includes a fully integrated enterprise application foundation with:
 
-Further development of backend integration and other workflow modules planned.
+- React frontend architecture
+- FastAPI backend architecture
+- PostgreSQL integration
+- JWT authentication
+- RBAC authorization system
+- Enterprise dashboard routing
+- Protected application routes
+- Live backend API integration
+- Paginated enterprise user directory
+- Cached frontend data layer
+- Virtualized rendering for large datasets
+- Skeleton loaders and Suspense boundaries
+- Centralized logging and middleware
+- Scalable modular backend structure
 
-## Scope of Work for Future
+---
 
-* Role Based Access Control (RBAC)
-* JSON Web Token authentication
-* Workflow Automation
-* Auditing
-* PSSR Process Management
-* API Integration
+# Enterprise Features Implemented
+
+## Authentication & Security
+
+- JWT Bearer authentication
+- Role-based access control (RBAC)
+- Protected frontend routing
+- Session token persistence
+- Centralized authentication middleware
+- Backend authorization dependencies
+- Enterprise login gateway UI
+- Secure password hashing using bcrypt
+- FastAPI dependency-based authorization
+- Token-aware API service layer
+
+---
+
+## User & Access Management
+
+- Enterprise personnel directory
+- PostgreSQL-backed live user system
+- Server-side pagination
+- Department filtering
+- Search functionality
+- Role segregation:
+  - ADMIN
+  - AREA_OWNER
+  - TEAM_MEMBER
+- User virtualization using `react-window`
+- Cached server state using `TanStack Query`
+- Dynamic enterprise dashboards per role
+
+---
+
+## Frontend Architecture
+
+- Modular scalable React architecture
+- Shared component system
+- Layout abstraction
+- Protected route wrappers
+- Role routers
+- Enterprise navigation sidebar
+- Responsive admin dashboard
+- Reusable loading skeletons
+- Lazy-loaded routes with Suspense
+- Type-safe TypeScript architecture
+
+---
+
+## Backend Architecture
+
+- FastAPI enterprise backend
+- SQLAlchemy ORM integration
+- PostgreSQL database integration
+- Modular route architecture
+- Centralized settings management
+- Structured middleware system
+- Request logging middleware
+- Exception handling middleware
+- Enterprise service layer architecture
+- Health check endpoints
+- Scalable API prefixing strategy
+
+---
+
+## Performance Optimizations
+
+- Paginated backend queries
+- Bounded SQL reads
+- Query projection optimization
+- Indexed user directory fields
+- Debounced frontend searching
+- React Query caching
+- Virtualized rendering for large tables
+- Skeleton UI loading states
+- Optimized API response contracts
+
+---
+
+# Tech Stack
+
+## Frontend
+
+- React 19
+- TypeScript
+- Vite
+- Tailwind CSS v4
+- TanStack Query
+- React Window
+- Framer Motion
+- Lucide React
+
+---
+
+## Backend
+
+- FastAPI
+- SQLAlchemy
+- PostgreSQL
+- Pydantic
+- Passlib
+- JWT Authentication
+- Uvicorn
+
+---
+
+## Testing & QA
+
+- Playwright
+- Manual QA Documentation
+- Smoke Testing
+- Route Verification
+- Backend Health Checks
+
+---
+
+# Project Structure
+
+```bash
+digital-pssr/
+│
+├── Frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   ├── contexts/
+│   │   ├── hooks/
+│   │   ├── layouts/
+│   │   ├── pages/
+│   │   ├── services/
+│   │   ├── utils/
+│   │   └── types/
+│   │
+│   ├── tests/
+│   └── playwright/
+│
+├── backend/
+│   ├── app/
+│   │   ├── auth/
+│   │   ├── config/
+│   │   ├── database/
+│   │   ├── middleware/
+│   │   ├── models/
+│   │   ├── routes/
+│   │   ├── schemas/
+│   │   ├── scripts/
+│   │   ├── services/
+│   │   └── main.py
+│   │
+│   └── requirements.txt
+│
+├── docs/
+├── architecture/
+└── README.md

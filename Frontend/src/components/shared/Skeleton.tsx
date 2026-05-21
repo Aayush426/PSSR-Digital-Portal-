@@ -40,6 +40,8 @@ export const DashboardCardSkeleton = memo(() => (
 
 DashboardCardSkeleton.displayName = 'DashboardCardSkeleton';
 
+export const SkeletonCard = DashboardCardSkeleton;
+
 export const StatsWidgetSkeleton = memo(() => (
   <div className="bg-surface-container-low border border-outline-variant p-4 rounded">
     <Skeleton className="h-3 w-28 mx-auto mb-3" />

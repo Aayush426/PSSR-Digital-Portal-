@@ -1,5 +1,6 @@
 import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { AdminLayout } from './layouts/AdminLayout';
+import { RoleLayout } from './layouts/RoleLayout';
 import { LoginPage } from './pages/auth/LoginPage';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { GlobalAppLoader, RouteSkeleton } from './components/shared/Skeleton';
@@ -72,10 +73,12 @@ export default function App() {
 
   if (currentPath.startsWith('/team')) {
     return (
-      <ProtectedRoute allowedRoles={['TEAM_MEMBER']}>
-        <Suspense fallback={<RouteSkeleton />}>
-          <TeamDashboardPage />
-        </Suspense>
+      <ProtectedRoute allowedRoles={['TEAM_MEMBER', 'ADMIN']}>
+        <RoleLayout currentPath={currentPath} onNavigate={navigate}>
+          <Suspense fallback={<RouteSkeleton />}>
+            <TeamDashboardPage />
+          </Suspense>
+        </RoleLayout>
       </ProtectedRoute>
     );
   }
@@ -83,9 +86,11 @@ export default function App() {
   if (currentPath.startsWith('/area-owner')) {
     return (
       <ProtectedRoute allowedRoles={['AREA_OWNER']}>
-        <Suspense fallback={<RouteSkeleton />}>
-          <AreaOwnerDashboardPage />
-        </Suspense>
+        <RoleLayout currentPath={currentPath} onNavigate={navigate}>
+          <Suspense fallback={<RouteSkeleton />}>
+            <AreaOwnerDashboardPage />
+          </Suspense>
+        </RoleLayout>
       </ProtectedRoute>
     );
   }

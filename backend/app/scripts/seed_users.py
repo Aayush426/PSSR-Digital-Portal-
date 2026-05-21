@@ -1,64 +1,74 @@
-from faker import Faker
-from passlib.context import CryptContext
+"""
+Enterprise-grade user seeding script for the Digital PSSR Portal.
+
+This script creates:
+- 1 ADMIN user
+- Multiple TEAM_MEMBER users
+- Multiple AREA_OWNER users
+
+Architecture Notes:
+- TEAM_MEMBER users belong to departments
+- AREA_OWNER users own refinery operational areas
+- Only AREA_OWNER users receive plant locations
+- All users use enterprise-secure bcrypt hashing
+- Seeding is optimized using batch commits
+
+Environment:
+- PostgreSQL
+- SQLAlchemy ORM
+- FastAPI backend
+"""
+
 import random
+from datetime import datetime
 
-from app.database import SessionLocal, engine, Base
-from app.models.user import User
+from faker import Faker
+from sqlalchemy import select
 
-# =========================================================
+from app.auth.password_handler import hash_password
+from app.database import Base, SessionLocal, engine
+from app.models.user import User, UserRole
+from app.scripts.seed_annexures import seed_annexures
+from app.scripts.seed_tasks import seed_enterprise_tasks
+
+
 # DATABASE INITIALIZATION
-# =========================================================
+
 
 Base.metadata.create_all(bind=engine)
 
-db = SessionLocal()
-
-# =========================================================
-# UTILITIES
-# =========================================================
-
 fake = Faker()
 
-pwd_context = CryptContext(
-    schemes=["bcrypt"],
-    deprecated="auto"
-)
 
-# Generate ONE secure hash and reuse it
-# This makes seeding thousands of users extremely fast.
-COMMON_PASSWORD_HASH = pwd_context.hash("Admin@123")
+# CONFIGURATION
 
-# =========================================================
-# STATIC ENTERPRISE DATA
-# =========================================================
+
+COMMON_PASSWORD = "Admin@123"
+
+TOTAL_USERS = 10000
+
+BATCH_SIZE = 1000
+
+
+# ENTERPRISE REFINERY DEPARTMENTS
+
 
 DEPARTMENTS = [
-    "Operations",
-    "Mechanical",
-    "Electrical",
-    "Instrumentation",
-    "Inspection",
     "Safety",
-    "Fire",
-    "Civil",
-    "Production",
-    "Utilities",
+    "PM Operation",
     "Process",
-    "Projects",
-    "Maintenance",
-    "Reliability",
-    "HSE",
-    "QA/QC",
-    "Warehouse",
-    "Planning",
-    "Turnaround",
-    "Engineering"
+    "Mechanical",
+    "Inspection",
+    "Civil",
+    "Electrical",
+    "Instrumental",
+    "Fire",
+    "IT"
 ]
 
-ROLES = [
-    "TEAM_MEMBER",
-    "AREA_OWNER"
-]
+
+# REFINERY PLANT SITES
+
 
 PLANTS = [
     "Vadinar Refinery",
@@ -67,123 +77,346 @@ PLANTS = [
     "Mumbai Terminal"
 ]
 
-DESIGNATIONS = [
-    "Engineer",
-    "Senior Engineer",
-    "Inspection Officer",
-    "Area Incharge",
-    "Shift Supervisor",
-    "Plant Operator",
-    "Safety Officer"
+
+# REFINERY OPERATIONAL AREAS
+
+
+OPERATIONAL_AREAS = [
+    "CDU",
+    "VDU",
+    "Hydrocracker",
+    "Sulfur Recovery",
+    "Utilities",
+    "Tank Farm",
+    "Hydrogen Unit",
 ]
 
 
-# =========================================================
-# HELPERS
-# =========================================================
+# TEAM MEMBER DESIGNATIONS
+
+
+TEAM_DESIGNATIONS = [
+    "Engineer",
+    "Senior Engineer",
+    "Inspection Officer",
+    "Shift Supervisor",
+    "Plant Operator",
+    "Safety Officer",
+    "Maintenance Engineer",
+    "Process Engineer",
+]
+
+
+# ROLE DISTRIBUTION
+
+
+def role_for_index(index: int) -> str:
+    """
+    Deterministic role allocation.
+
+    Every 10th user becomes an AREA_OWNER.
+    Remaining users become TEAM_MEMBER.
+    """
+
+    return (
+        UserRole.AREA_OWNER.value
+        if index % 10 == 0
+        else UserRole.TEAM_MEMBER.value
+    )
+
+
+
+# EMPLOYEE ID GENERATION
+
 
 def generate_employee_id(department: str, index: int) -> str:
     """
+    Generate enterprise employee IDs.
+
     Example:
-    NYR-OPS-1001
+    NYR-MEC-1001
     """
 
-    prefix = department[:3].upper()
-
-    return f"NYR-{prefix}-{1000 + index}"
+    return f"NYR-{department[:3].upper()}-{1000 + index}"
 
 
-# =========================================================
-# CREATE ADMIN USER
-# =========================================================
 
-admin_exists = db.query(User).filter(
-    User.email == "admin@nayara.com"
-).first()
+# USER FACTORY
 
-if not admin_exists:
 
-    admin = User(
-        employee_id="NYR-ADM-0001",
-        full_name="System Administrator",
-        email="admin@nayara.com",
-        password_hash=COMMON_PASSWORD_HASH,
-        role="ADMIN",
-        department="Administration",
-        designation="System Administrator",
-        plant_location="Corporate Office",
-        active=True
+def build_seed_user(index: int, password_hash: str) -> User:
+    """
+    Create enterprise refinery users.
+
+    TEAM_MEMBER:
+    - belongs to department
+    - no plant ownership
+    - technical designation
+
+    AREA_OWNER:
+    - owns operational refinery area
+    - receives plant assignment
+    - no department dependency
+    """
+
+    role = role_for_index(index)
+
+    department = random.choice(DEPARTMENTS)
+
+    is_area_owner = role == UserRole.AREA_OWNER.value
+
+    operational_area = random.choice(OPERATIONAL_AREAS)
+
+    return User(
+        employee_id=generate_employee_id(department, index),
+
+        full_name=fake.name(),
+
+        email=f"user{index}@nayara.com",
+
+        password_hash=password_hash,
+
+        role=role,
+
+        
+        # TEAM MEMBER STRUCTURE
+        
+        department=(
+            None
+            if is_area_owner
+            else department
+        ),
+
+        designation=(
+            f"{operational_area} Area Owner"
+            if is_area_owner
+            else random.choice(TEAM_DESIGNATIONS)
+        ),
+
+        
+        # ONLY AREA OWNERS RECEIVE PLANT ASSIGNMENT
+        
+        plant_location=(
+            random.choice(PLANTS)
+            if is_area_owner
+            else None
+        ),
+
+        active=True,
     )
 
-    db.add(admin)
+
+
+# ADMIN UPSERT
+
+
+def upsert_admin(db, password_hash: str) -> None:
+    """
+    Create or refresh enterprise admin account.
+    """
+
+    admin = db.query(User).filter(
+        User.email == "admin@nayara.com"
+    ).first()
+
+    if admin:
+        admin.password_hash = password_hash
+        admin.role = UserRole.ADMIN.value
+        admin.active = True
+        admin.updated_at = datetime.utcnow()
+
+        print("Admin user verified and refreshed")
+
+        return
+
+    db.add(
+        User(
+            employee_id="NYR-ADM-0001",
+
+            full_name="System Administrator",
+
+            email="admin@nayara.com",
+
+            password_hash=password_hash,
+
+            role=UserRole.ADMIN.value,
+
+            department="Administration",
+
+            designation="System Administrator",
+
+            plant_location="Corporate Office",
+
+            active=True,
+        )
+    )
 
     print("Admin user created")
 
 
-# =========================================================
-# CREATE ENTERPRISE USERS
-# =========================================================
 
-TOTAL_USERS = 10000
+# MAIN USER SEEDING
 
-for i in range(1, TOTAL_USERS + 1):
 
-    department = random.choice(DEPARTMENTS)
+def seed_enterprise_users() -> None:
+    """
+    Seed enterprise refinery users.
 
-    user = User(
-        employee_id=generate_employee_id(department, i),
+    Workflow:
+    1. Create admin
+    2. Create TEAM_MEMBER users
+    3. Create AREA_OWNER users
+    4. Seed refinery workflow tasks
+    """
 
-        full_name=fake.name(),
+    password_hash = hash_password(COMMON_PASSWORD)
 
-        email=f"user{i}@nayara.com",
+    db = SessionLocal()
 
-        password_hash=COMMON_PASSWORD_HASH,
+    try:
 
-        role=random.choice(ROLES),
+        print("\n========================================")
+        print("Digital PSSR enterprise user seed started")
+        print("========================================")
 
-        department=department,
+        print(f"Target users : {TOTAL_USERS}")
+        print(f"Batch size   : {BATCH_SIZE}")
 
-        designation=random.choice(DESIGNATIONS),
+        
+        # ADMIN CREATION
+        
 
-        plant_location=random.choice(PLANTS),
+        upsert_admin(db, password_hash)
 
-        active=True
-    )
-
-    db.add(user)
-
-    # Commit in batches for speed + memory efficiency
-    if i % 500 == 0:
         db.commit()
-        print(f"{i} users seeded...")
+
+        
+        # FETCH EXISTING USERS
+        
+
+        existing_emails = set(
+            db.execute(
+                select(User.email).where(
+                    User.email.like("user%@nayara.com")
+                )
+            ).scalars()
+        )
+
+        pending_new_users: list[User] = []
+
+        refreshed_existing = 0
 
 
-# Final commit
-db.commit()
+        # ENTERPRISE USER CREATION
+        
 
-# =========================================================
-# OUTPUT
-# =========================================================
+        for index in range(1, TOTAL_USERS + 1):
 
-print("\n========================================")
-print("10,000 enterprise users seeded successfully")
-print("========================================")
+            email = f"user{index}@nayara.com"
 
-print("\nADMIN LOGIN")
-print("----------------------------------------")
-print("Email    : admin@nayara.com")
-print("Password : Admin@123")
+            if email in existing_emails:
 
-print("\nSEEDED USER LOGIN")
-print("----------------------------------------")
-print("Email    : user1@nayara.com")
-print("Password : Admin@123")
+                db.query(User).filter(
+                    User.email == email
+                ).update(
+                    {
+                        "password_hash": password_hash,
+                        "role": role_for_index(index),
+                        "active": True,
+                        "updated_at": datetime.utcnow(),
+                    },
+                    synchronize_session=False,
+                )
 
-print("\nAny user from:")
-print("user1@nayara.com")
-print("to")
-print("user10000@nayara.com")
+                refreshed_existing += 1
 
-print("========================================")
+            else:
 
-db.close()
+                pending_new_users.append(
+                    build_seed_user(index, password_hash)
+                )
+
+            
+            # BATCH COMMIT OPTIMIZATION
+            
+
+            if index % BATCH_SIZE == 0:
+
+                if pending_new_users:
+
+                    db.bulk_save_objects(
+                        pending_new_users
+                    )
+
+                    pending_new_users.clear()
+
+                db.commit()
+
+                print(
+                    f"Processed {index}/{TOTAL_USERS} users "
+                    f"({refreshed_existing} refreshed)"
+                )
+
+        
+        # FINAL INSERT COMMIT
+        
+
+        if pending_new_users:
+
+            db.bulk_save_objects(
+                pending_new_users
+            )
+
+        db.commit()
+
+        print("\nEnterprise users seeded successfully")
+
+    finally:
+
+        db.close()
+
+    
+    # TASK SEEDING
+    
+
+    seed_enterprise_tasks()
+    seed_annexures()
+
+    
+    # LOGIN OUTPUT
+    
+
+    print("\n========================================")
+    print("Digital PSSR enterprise seed completed")
+    print("========================================")
+
+    print("\nADMIN LOGIN")
+    print("----------------------------------------")
+    print("Email    : admin@nayara.com")
+    print("Password : Admin@123")
+
+    print("\nTEAM MEMBER LOGIN")
+    print("----------------------------------------")
+    print("Email    : user1@nayara.com")
+    print("Password : Admin@123")
+
+    print("\nAREA OWNER LOGIN")
+    print("----------------------------------------")
+    print("Email    : user10@nayara.com")
+    print("Password : Admin@123")
+
+    print("\nSEEDED USER RANGE")
+    print("----------------------------------------")
+    print("user1@nayara.com")
+    print("to")
+    print("user10000@nayara.com")
+
+    print("========================================")
+
+
+
+# SCRIPT ENTRYPOINT
+
+
+if __name__ == "__main__":
+    seed_enterprise_users()

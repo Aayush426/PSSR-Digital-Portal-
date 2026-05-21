@@ -78,7 +78,7 @@ export interface LoginResponse {
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
 
-async function request<T>(
+export async function apiRequest<T>(
   path: string,
   options: RequestInit = {},
   authenticated = true
@@ -88,7 +88,9 @@ async function request<T>(
    * unauthenticated calls. Backend dependencies remain the real security gate.
    */
   const headers = new Headers(options.headers);
-  headers.set('Content-Type', 'application/json');
+  if (!(options.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
+  }
 
   const token = tokenStore.getToken();
   if (authenticated && token) {
@@ -115,7 +117,7 @@ async function request<T>(
 export const api = {
   /** Authenticate against FastAPI and receive a JWT plus routed user profile. */
   login(email: string, password: string): Promise<LoginResponse> {
-    return request<LoginResponse>(
+    return apiRequest<LoginResponse>(
       '/auth/login',
       {
         method: 'POST',
@@ -127,12 +129,12 @@ export const api = {
 
   /** Hydrate current auth context from the backend on app startup. */
   me(): Promise<AuthUser> {
-    return request<AuthUser>('/auth/me');
+    return apiRequest<AuthUser>('/auth/me');
   },
 
   /** Notify the backend of logout intent, then the client clears local state. */
   logout(): Promise<null> {
-    return request<null>('/auth/logout', { method: 'POST' });
+    return apiRequest<null>('/auth/logout', { method: 'POST' });
   },
 
   /**
@@ -151,6 +153,6 @@ export const api = {
     if (typeof params.active === 'boolean') query.set('active', String(params.active));
 
     const suffix = query.toString() ? `?${query.toString()}` : '';
-    return request<PaginatedUsersResponse>(`/admin/users${suffix}`);
+    return apiRequest<PaginatedUsersResponse>(`/admin/users${suffix}`);
   },
 };

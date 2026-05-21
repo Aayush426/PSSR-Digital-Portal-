@@ -41,11 +41,11 @@ def paginated_response(
 
     return success_response(
         data={
-            "items": data,
+            "records": data,
             "pagination": {
-                "total": total,
                 "page": page,
-                "per_page": per_page,
+                "limit": per_page,
+                "total_records": total,
                 "total_pages": ceil(total / per_page) if per_page else 0,
             },
         },

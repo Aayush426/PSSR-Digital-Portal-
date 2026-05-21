@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   AlertTriangle,
   Filter,
-  Loader2,
   Plus,
   RefreshCw,
   Search,
@@ -13,6 +12,8 @@ import {
 import { PageTitle } from '../../components/shared/UIItems';
 import { UsersTable } from '../../components/tables/UsersTable';
 import { useAdminUsers } from '../../hooks/useAdminUsers';
+import { useDebouncedValue } from '../../hooks/useDebouncedValue';
+import { UserTableSkeleton } from '../../components/shared/Skeleton';
 
 /*
  ADMIN directory page.
@@ -31,6 +32,7 @@ export const UsersPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const debouncedSearch = useDebouncedValue(search);
 
   const {
     data,
@@ -39,7 +41,7 @@ export const UsersPage: React.FC = () => {
     error,
     refetch,
   } = useAdminUsers({
-    search,
+    search: debouncedSearch,
     page: currentPage,
     limit: pageSize,
   });
@@ -156,13 +158,7 @@ export const UsersPage: React.FC = () => {
       
 
       {(isLoading || isFetching) && users.length === 0 && (
-        <div className="bg-surface-container-lowest border border-outline-variant rounded p-8 flex items-center justify-center text-primary">
-          <Loader2 className="w-5 h-5 mr-3 animate-spin" />
-
-          <span className="text-label-md font-black uppercase tracking-widest">
-            Loading Live Personnel Directory
-          </span>
-        </div>
+        <UserTableSkeleton />
       )}
 
       

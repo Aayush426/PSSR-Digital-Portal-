@@ -53,7 +53,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPath, onNavigate }) => 
           </div>
           <div className="overflow-hidden">
             <p className="text-[10px] font-black text-primary uppercase leading-tight">License: Enterprise</p>
-            <p className="text-[9px] text-on-surface-variant truncate">v4.2.0-stable</p>
           </div>
         </div>
       </div>

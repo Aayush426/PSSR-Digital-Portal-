@@ -24,13 +24,16 @@ class UserRole(str, Enum):
 class Department(str, Enum):
     ADMINISTRATION = "Administration"
     OPERATIONS = "Operations"
+    PM_OPERATION = "PM Operation"
     MECHANICAL = "Mechanical"
     ELECTRICAL = "Electrical"
     INSTRUMENTATION = "Instrumentation"
+    INSTRUMENTAL = "Instrumental"
     INSPECTION = "Inspection"
     SAFETY = "Safety"
     FIRE = "Fire"
     CIVIL = "Civil"
+    IT = "IT"
     PRODUCTION = "Production"
     UTILITIES = "Utilities"
     PROCESS = "Process"
@@ -74,11 +77,11 @@ class User(Base):
 
     role = Column(String, nullable=False)
 
-    department = Column(String, nullable=False)
+    department = Column(String, nullable=True)
 
     designation = Column(String, nullable=False)
 
-    plant_location = Column(String, nullable=False)
+    plant_location = Column(String, nullable=True)
 
     active = Column(Boolean, default=True)
 

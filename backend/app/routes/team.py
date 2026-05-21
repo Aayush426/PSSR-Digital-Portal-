@@ -8,24 +8,24 @@ dynamically through assignments instead of a permanent PSSR_INITIATOR role.
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.auth.dependencies import require_pssr_initiator, require_team_member
+from app.auth.dependencies import require_pssr_initiator, require_team_member_or_admin
 from app.core.responses import success_response
 from app.database.session import get_db
 from app.models.user import User
-from app.services.dashboard_service import DashboardService
+from app.services.team_service import TeamService
 
 router = APIRouter(prefix="/team", tags=["Team Member"])
 
 
 @router.get("/dashboard", summary="Team Member Dashboard")
 def team_dashboard(
-    current_user: User = Depends(require_team_member),
+    current_user: User = Depends(require_team_member_or_admin),
     db: Session = Depends(get_db),
 ):
-    """Return the minimal TEAM_MEMBER dashboard payload."""
+    """Return the backend-owned TEAM_MEMBER dashboard payload."""
 
     return success_response(
-        data=DashboardService.get_team_dashboard(db, current_user),
+        data=TeamService.get_dashboard(db, current_user).model_dump(mode="json"),
         message="Welcome to Team Member Dashboard",
     )
 

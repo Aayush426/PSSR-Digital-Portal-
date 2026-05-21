@@ -1,5 +1,6 @@
 # Digital PSSR Portal
 
+<<<<<<< HEAD
 Enterprise-grade Digital Pre Startup Safety Review (PSSR) platform designed for refinery and industrial operations environments.
 
 The platform digitizes and standardizes the complete PSSR lifecycle including personnel authorization, workflow approvals, safety verification, auditability, operational documentation, and department-level coordination.
@@ -200,3 +201,94 @@ digital-pssr/
 ├── docs/
 ├── architecture/
 └── README.md
+=======
+Enterprise Pre-Startup Safety Review (PSSR) portal for refinery operations.
+
+## Current Scope
+
+The application now includes a backend-integrated Admin Center with role-based navigation and an Annexure Master Template Management module.
+
+The annexure module is for reusable master definitions only. It manages annexure metadata, section/question templates, revision history, department visibility, Word template upload/download, and soft archive/restore controls. Runtime checklist execution, pass/fail completion, evidence review queues, and live task progress belong to separate PSSR execution workflows.
+
+## Annexure Management
+
+The Admin Annexures page contains exactly three tabs:
+
+* Placeholder 1
+* Placeholder 2
+* Manage Annexures
+
+Manage Annexures provides:
+
+* Searchable, paginated annexure master list
+* Active, archived, revision, department, template, and recently modified filters
+* Centralized split-pane layout for master list and selected annexure detail
+* Master metadata and audit-oriented revision information
+* Soft archive and restore controls
+* Department visibility chips
+* Controlled Word template upload and download
+* Section builder with accordion-style section review
+* Question builder with response type dropdowns, severity, ownership, guidance notes, remarks, attachment, and punch-point toggles
+* 25 refinery-specific annexure definitions with unique section/question content
+
+## Backend
+
+Backend services are implemented with FastAPI and SQLAlchemy under `backend/app`.
+
+Relevant annexure structure:
+
+* `backend/app/models/annexures/`
+* `backend/app/routes/annexures/`
+* `backend/app/services/annexures/`
+* `backend/app/repositories/annexures/`
+* `backend/app/schemas/annexures/`
+* `backend/app/scripts/seed_annexures.py`
+
+Key annexure endpoints are mounted under `/api/v1/annexures`.
+
+## Frontend
+
+Frontend is built with React, TypeScript, Vite, Tailwind CSS v4, React Query, and Lucide React.
+
+Relevant annexure files:
+
+* `Frontend/src/pages/admin/AnnexuresPage.tsx`
+* `Frontend/src/hooks/useAnnexures.ts`
+* `Frontend/src/services/annexureService.ts`
+* `Frontend/src/types/annexure.types.ts`
+
+## Development
+
+Install frontend dependencies:
+
+```bash
+cd Frontend
+npm install
+```
+
+Run the frontend:
+
+```bash
+npm run dev
+```
+
+Verify frontend:
+
+```bash
+npm run lint
+npm run build
+```
+
+Verify backend syntax:
+
+```bash
+python3 -m compileall backend/app
+```
+
+Run the annexure seed script from an environment with backend dependencies installed:
+
+```bash
+cd backend
+python3 -m app.scripts.seed_annexures
+```
+>>>>>>> 3f26ceb (feat: implement enterprise annexure management architecture and workflow engine)

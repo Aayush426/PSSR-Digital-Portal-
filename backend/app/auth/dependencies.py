@@ -67,9 +67,22 @@ def require_role(required_role: UserRole):
     return dependency
 
 
+def require_role_or_admin(required_role: UserRole):
+    """Build a role dependency that also permits ADMIN operational override."""
+
+    def dependency(current_user: User = Depends(get_current_user)) -> User:
+        role = _role_value(current_user)
+        if role not in {required_role.value, UserRole.ADMIN.value}:
+            raise AuthorizationError(f"{required_role.value} access required.")
+        return current_user
+
+    return dependency
+
+
 require_admin = require_role(UserRole.ADMIN)
 require_team_member = require_role(UserRole.TEAM_MEMBER)
 require_area_owner = require_role(UserRole.AREA_OWNER)
+require_team_member_or_admin = require_role_or_admin(UserRole.TEAM_MEMBER)
 
 
 def require_pssr_initiator(

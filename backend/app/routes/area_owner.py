@@ -13,7 +13,7 @@ from app.auth.dependencies import require_area_owner
 from app.core.responses import success_response
 from app.database.session import get_db
 from app.models.user import User
-from app.services.dashboard_service import DashboardService
+from app.services.area_owner_service import AreaOwnerService
 
 router = APIRouter(prefix="/area-owner", tags=["Area Owner"])
 
@@ -23,9 +23,9 @@ def area_owner_dashboard(
     current_user: User = Depends(require_area_owner),
     db: Session = Depends(get_db),
 ):
-    """Return the minimal AREA_OWNER dashboard payload."""
+    """Return the backend-owned AREA_OWNER dashboard payload."""
 
     return success_response(
-        data=DashboardService.get_area_owner_dashboard(db, current_user),
+        data=AreaOwnerService.get_dashboard(db, current_user).model_dump(mode="json"),
         message="Welcome to Area Owner Dashboard",
     )

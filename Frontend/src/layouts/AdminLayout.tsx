@@ -15,8 +15,8 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, currentPath,
       
       <div className="flex-1 flex flex-col ml-[240px]">
         <Header />
-        <main className="flex-1 overflow-y-auto p-8 custom-scrollbar relative">
-          <div className="max-w-7xl mx-auto">
+        <main className="flex-1 overflow-y-auto px-5 py-6 lg:px-8 custom-scrollbar relative">
+          <div className="w-full max-w-[1800px] mx-auto">
             {children}
           </div>
         </main>

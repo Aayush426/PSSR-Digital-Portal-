@@ -34,12 +34,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config.settings import settings
 from app.database.indexes import ensure_user_directory_indexes
+from app.database.init_db import initialize_database_schema
 from app.database.session import check_database_connection
 from app.middleware.exception_handler import register_exception_handlers
 from app.middleware.logging_middleware import RequestLoggingMiddleware
 from app.routes import (
     auth_router, admin_router, pssr_router,
-    team_router, area_owner_router, health_router
+    team_router, area_owner_router, annexures_router, health_router
 )
 from app.core.logging import get_logger
 
@@ -81,6 +82,8 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("Database connection failed at startup")
 
     logger.info("Database connection: VERIFIED")
+    initialize_database_schema()
+    logger.info("Database schema: VERIFIED")
     ensure_user_directory_indexes()
     logger.info(f"API available at: http://0.0.0.0:8000{settings.API_PREFIX}")
     logger.info(
@@ -196,6 +199,7 @@ All responses follow the standard envelope:
     # Admin routes — RBAC enforced at router level
     app.include_router(admin_router, prefix=settings.API_PREFIX)
     app.include_router(pssr_router, prefix=settings.API_PREFIX)
+    app.include_router(annexures_router, prefix=settings.API_PREFIX)
 
     # Team Member routes
     app.include_router(team_router, prefix=settings.API_PREFIX)

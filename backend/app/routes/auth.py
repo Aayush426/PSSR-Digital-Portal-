@@ -56,7 +56,7 @@ router = APIRouter(
 
     Workflow:
     1.  First Validation of  email format and password length happens via Pydantic model (LoginRequest)
-    2. Verifies the  bcrypted  password hash against stored hash
+    2. Verifies the centralized passlib password hash against stored hash
     3. Checks account active status (only active users can login)
     4. Generates a signed JWT access token
     5. Returns token + user profile with dashboard routing path

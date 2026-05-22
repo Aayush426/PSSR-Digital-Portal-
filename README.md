@@ -1,6 +1,5 @@
 # Digital PSSR Portal
 
-<<<<<<< HEAD
 Enterprise-grade Digital Pre Startup Safety Review (PSSR) platform designed for refinery and industrial operations environments.
 
 The platform digitizes and standardizes the complete PSSR lifecycle including personnel authorization, workflow approvals, safety verification, auditability, operational documentation, and department-level coordination.

@@ -34,6 +34,143 @@ class UserService:
     """Business operations for enterprise users."""
 
     @staticmethod
+    def get_fixed_departments() -> List[str]:
+        """
+        Fixed department catalog as required by spec (portal-wide).
+
+        Note: Departments are stored on User.department as a string, so we keep
+        the catalog static to avoid schema changes.
+        """
+        return [
+            "Safety/PSM",
+            "Operations",
+            "Process",
+            "Mechanical",
+            "Inspection",
+            "Civil",
+            "Electrical",
+            "Instrumentation",
+            "Fire",
+            "IT",
+        ]
+
+    @staticmethod
+    def list_team_members_by_department(
+        db: Session,
+        department: str,
+        include_inactive: bool = True,
+    ) -> List[UserProfileResponse]:
+        """List TEAM_MEMBER users for a specific department."""
+        query = db.query(User).filter(
+            User.role == UserRole.TEAM_MEMBER.value,
+            User.department == department,
+        )
+        if not include_inactive:
+            query = query.filter(User.active.is_(True))
+
+        users = query.order_by(User.full_name.asc()).all()
+        return [
+            UserService.build_user_profile(db, u, check_initiator=True)
+            for u in users
+        ]
+
+    @staticmethod
+    def assign_team_member_to_department(
+        db: Session,
+        user_id: int,
+        department: str,
+        updated_by: User,
+        active: bool = True,
+    ) -> UserProfileResponse:
+        """Assign TEAM_MEMBER role and department; marks user active by default."""
+        user = UserService.get_by_id(db, user_id)
+        if not user:
+            raise ResourceNotFoundError("User", user_id)
+
+        # Only ADMIN can do this (route is require_admin), so enforce role & update.
+        user.role = UserRole.TEAM_MEMBER.value
+        user.department = department
+        user.active = active
+        user.updated_at = datetime.now(timezone.utc)
+
+        db.commit()
+        db.refresh(user)
+        return UserService.build_user_profile(db, user, check_initiator=True)
+
+    @staticmethod
+    def deactivate_department_team_members(
+        db: Session,
+        department: str,
+        updated_by: User,
+    ) -> int:
+        """
+        Soft-deactivate all TEAM_MEMBER users in a given department.
+
+        Returns number of affected users.
+        """
+        query = db.query(User).filter(
+            User.role == UserRole.TEAM_MEMBER.value,
+            User.department == department,
+        )
+        users = query.all()
+        affected = 0
+        for u in users:
+            u.active = False
+            u.updated_at = datetime.now(timezone.utc)
+            affected += 1
+
+        db.commit()
+        return affected
+
+    @staticmethod
+    def list_departments_with_team_members(
+        db: Session,
+        include_inactive: bool = True,
+    ) -> List[dict]:
+        """
+        Return departments grouped with team members for admin dashboard.
+
+        Admin dashboard requirement:
+        - Departments and their team members must be visible together.
+        - Includes per-user initiator flag (dynamic via assignment table).
+        """
+        query = db.query(User.department).filter(User.role == UserRole.TEAM_MEMBER.value)
+
+        if not include_inactive:
+            query = query.filter(User.active.is_(True))
+
+        department_rows = query.distinct().all()
+        departments = [row[0] for row in department_rows if row[0] is not None]
+
+        results: list[dict] = []
+        for department in sorted(departments):
+            members_q = db.query(User).filter(
+                User.department == department,
+                User.role == UserRole.TEAM_MEMBER.value,
+            )
+            if not include_inactive:
+                members_q = members_q.filter(User.active.is_(True))
+
+            members = members_q.order_by(User.full_name.asc()).all()
+
+            enriched = [
+                UserService.build_user_profile(db, u, check_initiator=True).model_dump(
+                    mode="json"
+                )
+                for u in members
+            ]
+
+            results.append(
+                {
+                    "department": department,
+                    "teamMembers": enriched,
+                    "count": len(enriched),
+                }
+            )
+
+        return results
+
+    @staticmethod
     def get_by_id(db: Session, user_id: int) -> Optional[User]:
         """Return a user by primary key."""
 

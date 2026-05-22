@@ -70,8 +70,7 @@ class InitiatorAssignmentService:
             active_count = (
                 db.query(PSSRInitiatorAssignment)
                 .filter(
-                    PSSRInitiatorAssignment.project_reference
-                    == request.project_reference,
+                    PSSRInitiatorAssignment.project_reference == request.project_reference,
                     PSSRInitiatorAssignment.status == AssignmentStatus.ACTIVE.value,
                 )
                 .count()
@@ -105,7 +104,9 @@ class InitiatorAssignmentService:
             .first()
         )
         if not assignment:
-            raise ResourceNotFoundError("PSSR initiator assignment", request.assignment_id)
+            raise ResourceNotFoundError(
+                "PSSR initiator assignment", request.assignment_id
+            )
         if assignment.status != AssignmentStatus.ACTIVE.value:
             raise ConflictError("Only active assignments can be revoked.")
 
@@ -117,6 +118,25 @@ class InitiatorAssignmentService:
         db.commit()
         db.refresh(assignment)
         return InitiatorAssignmentService._to_response(assignment)
+
+    @staticmethod
+    def hard_delete_assignment(db: Session, assignment_id: int) -> int:
+        """Hard delete an initiator assignment row while keeping the User row.
+
+        This removes the record from `pssr_initiator_assignments` completely.
+        """
+
+        assignment = (
+            db.query(PSSRInitiatorAssignment)
+            .filter(PSSRInitiatorAssignment.id == assignment_id)
+            .first()
+        )
+        if not assignment:
+            raise ResourceNotFoundError("PSSR initiator assignment", assignment_id)
+
+        db.delete(assignment)
+        db.commit()
+        return assignment_id
 
     @staticmethod
     def list_assignments(
@@ -150,3 +170,4 @@ class InitiatorAssignmentService:
             InitiatorAssignmentService._to_response(assignment)
             for assignment in assignments
         ], total
+

@@ -1,9 +1,9 @@
 from faker import Faker
-from passlib.context import CryptContext
 import random
 
 from app.database import SessionLocal, engine, Base
 from app.models.user import User
+from app.auth.password_handler import hash_password
 
 # =========================================================
 # DATABASE INITIALIZATION
@@ -19,14 +19,9 @@ db = SessionLocal()
 
 fake = Faker()
 
-pwd_context = CryptContext(
-    schemes=["bcrypt"],
-    deprecated="auto"
-)
-
 # Generate ONE secure hash and reuse it
 # This makes seeding thousands of users extremely fast.
-COMMON_PASSWORD_HASH = pwd_context.hash("Admin@123")
+COMMON_PASSWORD_HASH = hash_password("Admin@123")
 
 # =========================================================
 # STATIC ENTERPRISE DATA

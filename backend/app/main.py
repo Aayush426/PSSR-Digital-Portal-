@@ -81,6 +81,16 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("Database connection failed at startup")
 
     logger.info("Database connection: VERIFIED")
+
+    # Ensure schema exists before creating indexes (prevents "no such table: main.users" on fresh DBs)
+    try:
+        from app.database.database import engine, Base
+        Base.metadata.create_all(bind=engine)
+        logger.info("Database tables created/verified")
+    except Exception:
+        # Fallback: do not block startup if table creation is managed externally.
+        logger.exception("Database table bootstrap failed (tables may already exist / migrations may handle schema)")
+
     ensure_user_directory_indexes()
     logger.info(f"API available at: http://0.0.0.0:8000{settings.API_PREFIX}")
     logger.info(

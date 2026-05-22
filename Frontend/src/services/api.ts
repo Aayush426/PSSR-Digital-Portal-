@@ -61,6 +61,35 @@ export interface ListUsersParams {
   active?: boolean;
 }
 
+export interface DepartmentTeamMembers {
+  department: string;
+  count: number;
+  teamMembers: AdminUser[];
+}
+
+export interface PssrInitiatorAssignment {
+  id: number;
+  user_id: number;
+  user_employee_id: string;
+  user_full_name: string;
+  project_reference?: string | null;
+  status: string;
+  reason?: string | null;
+  assigned_at: string;
+  revoked_at?: string | null;
+}
+
+export interface AssignInitiatorRequest {
+  user_id: number;
+  project_reference?: string | null;
+  reason?: string | null;
+}
+
+export interface RevokeInitiatorRequest {
+  assignment_id: number;
+  reason?: string | null;
+}
+
 interface ApiEnvelope<T> {
   success: boolean;
   message: string;
@@ -112,6 +141,25 @@ async function request<T>(
   return envelope.data;
 }
 
+export interface DepartmentListResponse {
+  departments: string[];
+}
+
+export interface TeamMemberDirectoryRow {
+  id: number;
+  employee_id: string;
+  full_name: string;
+  email: string;
+  role: Role;
+  department: string;
+  designation?: string | null;
+  plant_location?: string | null;
+  active: boolean;
+  dashboard_path: string;
+  is_pssr_initiator: boolean;
+  last_login_at?: string | null;
+}
+
 export const api = {
   /** Authenticate against FastAPI and receive a JWT plus routed user profile. */
   login(email: string, password: string): Promise<LoginResponse> {
@@ -152,5 +200,107 @@ export const api = {
 
     const suffix = query.toString() ? `?${query.toString()}` : '';
     return request<PaginatedUsersResponse>(`/admin/users${suffix}`);
+  },
+
+  /** Admin dashboard: grouped departments -> team members (team role). */
+  getDepartmentsTeamMembers(includeInactive = true): Promise<DepartmentTeamMembers[]> {
+    const query = new URLSearchParams();
+    query.set('include_inactive', String(includeInactive));
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    return request<DepartmentTeamMembers[]>(
+      `/admin/dashboard/departments-team-members${suffix}`
+    );
+  },
+
+  /** Admin: update user role/department/active status. */
+  updateUser(userId: number, payload: Partial<{
+    full_name: string;
+    role: Role;
+    department: string;
+    designation: string | null;
+    plant_location: string | null;
+    active: boolean;
+  }>): Promise<AdminUser> {
+    return request<AdminUser>(`/admin/users/${userId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /** Admin: list PSSR initiator assignments (paginated envelope). */
+  listPssrInitiatorAssignments(params?: {
+    status?: 'ACTIVE' | 'REVOKED';
+    status_filter?: 'ACTIVE' | 'REVOKED';
+    user_id?: number;
+    project_reference?: string;
+    page?: number;
+    per_page?: number;
+  }): Promise<any> {
+    const query = new URLSearchParams();
+    // backend accepts both ?status (aliased) and ?status_filter for compatibility
+    if (params?.status) query.set('status', params.status);
+    if (params?.status_filter) query.set('status_filter', params.status_filter);
+    if (params?.user_id !== undefined) query.set('user_id', String(params.user_id));
+    if (params?.project_reference) query.set('project_reference', params.project_reference);
+    if (params?.page !== undefined) query.set('page', String(params.page));
+    if (params?.per_page !== undefined) query.set('per_page', String(params.per_page));
+
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    return request<any>(`/admin/pssr/assignments${suffix}`);
+  },
+
+  /** Admin: assign a TEAM_MEMBER as a temporary PSSR initiator. */
+  assignPssrInitiator(payload: AssignInitiatorRequest): Promise<PssrInitiatorAssignment> {
+    return request<PssrInitiatorAssignment>('/admin/pssr/assign-initiator', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /** Admin: revoke an active PSSR initiator assignment. */
+  revokePssrInitiator(payload: RevokeInitiatorRequest): Promise<PssrInitiatorAssignment> {
+    return request<PssrInitiatorAssignment>('/admin/pssr/revoke-initiator', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /** Admin: hard delete a PSSR initiator assignment row (keeps User). */
+  hardDeletePssrInitiatorAssignment(assignmentId: number): Promise<{ assignment_id: number }> {
+    return request<{ assignment_id: number }>(`/admin/pssr/hard-delete-assignment/${assignmentId}`, {
+      method: 'DELETE',
+    });
+  },
+
+
+  /** Admin: fixed department catalog (portal spec). */
+  getFixedDepartments(): Promise<string[]> {
+    return request<string[]>(`/admin/departments`);
+  },
+
+  /** Admin: team members for a specific department. */
+  listTeamMembersByDepartment(params: { department: string; includeInactive?: boolean }): Promise<AdminUser[]> {
+    const query = new URLSearchParams();
+    query.set('department', params.department);
+    query.set('include_inactive', String(params.includeInactive ?? false));
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    return request<AdminUser[]>(`/admin/team-members${suffix}`);
+  },
+
+  /** Admin: assign (or re-activate) TEAM_MEMBER role to a department. */
+  assignTeamMemberToDepartment(payload: { user_id: number; department: string; active?: boolean }): Promise<AdminUser> {
+    return request<AdminUser>(`/admin/team-members/assign`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /** Admin: deactivate all TEAM_MEMBERs in a department (bulk soft remove). */
+  deactivateDepartmentTeamMembers(
+    department: string
+  ): Promise<{ department: string; affected_team_members: number }> {
+    return request<{ department: string; affected_team_members: number }>(
+      `/admin/departments/${encodeURIComponent(department)}`
+    );
   },
 };

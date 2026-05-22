@@ -16,6 +16,7 @@ from app.core.responses import success_response
 from app.database.session import get_db
 from app.models.user import Department, User, UserRole
 from app.schemas.auth import UserUpdateRequest
+from pydantic import BaseModel
 from app.services.admin_service import AdminService
 from app.services.user_service import UserService
 
@@ -117,6 +118,97 @@ def update_user(
         data=profile.model_dump(mode="json"),
         message="User profile updated successfully.",
     )
+
+
+class AssignTeamMemberRequest(BaseModel):
+    user_id: int
+    department: str
+    active: bool = True
+
+
+@router.get(
+    "/dashboard/departments-team-members",
+    summary="List departments grouped with team members",
+)
+def departments_team_members(
+    include_inactive: bool = Query(True),
+    db: Session = Depends(get_db),
+):
+    """
+    Return department -> TEAM_MEMBER listing for Admin Dashboard.
+
+    Team members are grouped by the user's department string.
+    is_pssr_initiator is computed dynamically from assignment table.
+    """
+    grouped = UserService.list_departments_with_team_members(
+        db=db, include_inactive=include_inactive
+    )
+    return success_response(
+        data=grouped,
+        message=f"Found {len(grouped)} department(s) with team member(s).",
+    )
+
+
+@router.get("/departments", summary="List fixed departments")
+def list_departments():
+    """Return the fixed department catalog required by the portal spec."""
+    return success_response(
+        data=UserService.get_fixed_departments(),
+        message=f"Found {len(UserService.get_fixed_departments())} department(s).",
+    )
+
+
+@router.get("/team-members", summary="List team members by department")
+def list_team_members_by_department(
+    department: str = Query(...),
+    include_inactive: bool = Query(False),
+    db: Session = Depends(get_db),
+):
+    """Return TEAM_MEMBER users for the given department."""
+    team_members = UserService.list_team_members_by_department(
+        db=db, department=department, include_inactive=include_inactive
+    )
+    return success_response(
+        data=[u.model_dump(mode="json") for u in team_members],
+        message=f"Found {len(team_members)} team member(s) in '{department}'.",
+    )
+
+
+@router.post("/team-members/assign", summary="Assign TEAM_MEMBER to department")
+def assign_team_member_to_department(
+    request: AssignTeamMemberRequest,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(require_admin),
+):
+    """Assign TEAM_MEMBER role and department; soft-activates by default."""
+    profile = UserService.assign_team_member_to_department(
+        db=db,
+        user_id=request.user_id,
+        department=request.department,
+        updated_by=current_admin,
+        active=request.active,
+    )
+    return success_response(
+        data=profile.model_dump(mode="json"),
+        message=f"Assigned user '{profile.full_name}' to department '{profile.department}'.",
+    )
+
+
+@router.delete("/departments/{department}", summary="Deactivate all team members in department")
+def deactivate_department_team_members(
+    department: str,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(require_admin),
+):
+    affected = UserService.deactivate_department_team_members(
+        db=db, department=department, updated_by=current_admin
+    )
+    return success_response(
+        data={"department": department, "affected_team_members": affected},
+        message=f"Deactivated {affected} TEAM_MEMBER(s) in '{department}'.",
+    )
+
+
 
 
 @router.delete(

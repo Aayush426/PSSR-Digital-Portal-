@@ -9,6 +9,7 @@ const DashboardPage = lazy(() => import('./pages/admin/DashboardPage').then((mod
 const UsersPage = lazy(() => import('./pages/admin/UsersPage').then((module) => ({ default: module.UsersPage })));
 const RolesPermissionsPage = lazy(() => import('./pages/admin/RolesPermissionsPage').then((module) => ({ default: module.RolesPermissionsPage })));
 const DepartmentsPage = lazy(() => import('./pages/admin/DepartmentsPage').then((module) => ({ default: module.DepartmentsPage })));
+const ManageDepartmentsPage = lazy(() => import('./pages/admin/ManageDepartmentsPage').then((module) => ({ default: module.ManageDepartmentsPage })));
 const AnnexuresPage = lazy(() => import('./pages/admin/AnnexuresPage').then((module) => ({ default: module.AnnexuresPage })));
 const WorkflowConfigurationPage = lazy(() => import('./pages/admin/WorkflowConfigurationPage').then((module) => ({ default: module.WorkflowConfigurationPage })));
 const PSSRRecordsPage = lazy(() => import('./pages/admin/PSSRRecordsPage').then((module) => ({ default: module.PSSRRecordsPage })));
@@ -60,6 +61,7 @@ export default function App() {
       case '/admin/users': return <UsersPage />;
       case '/admin/roles': return <RolesPermissionsPage />;
       case '/admin/departments': return <DepartmentsPage />;
+      case '/admin/manage-departments': return <ManageDepartmentsPage />;
       case '/admin/annexures': return <AnnexuresPage />;
       case '/admin/workflow': return <WorkflowConfigurationPage />;
       case '/admin/pssr': return <PSSRRecordsPage />;

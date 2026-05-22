@@ -8,12 +8,14 @@ import {
   ClipboardCheck, 
   PieChart, 
   History, 
-  Settings 
+  Settings,
+  UsersRound,
 } from 'lucide-react';
 
 export const NAV_ITEMS = [
   { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
   { id: 'users', name: 'Users', icon: Users, path: '/admin/users' },
+  { id: 'manage-departments', name: 'Manage Departments', icon: UsersRound, path: '/admin/manage-departments' },
   { id: 'roles', name: 'Roles & Permissions', icon: ShieldCheck, path: '/admin/roles' },
   { id: 'departments', name: 'Departments', icon: Building2, path: '/admin/departments' },
   { id: 'annexures', name: 'Annexures', icon: FileText, path: '/admin/annexures' },

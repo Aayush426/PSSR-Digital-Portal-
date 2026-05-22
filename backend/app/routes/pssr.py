@@ -62,20 +62,50 @@ def revoke_pssr_initiator(
     )
 
 
+@router.delete(
+    "/hard-delete-assignment/{assignment_id}",
+    summary="Hard delete PSSR initiator assignment (keep User)",
+)
+def hard_delete_assignment(
+    assignment_id: int,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(require_admin),
+):
+    """Hard delete the initiator assignment row.
+
+    The User row is not affected.
+    """
+
+    deleted_id = InitiatorAssignmentService.hard_delete_assignment(
+        db=db, assignment_id=assignment_id
+    )
+    return success_response(
+        data={"assignment_id": deleted_id},
+        message=f"Hard deleted PSSR initiator assignment {deleted_id}.",
+    )
+
+
 @router.get("/assignments", summary="List PSSR initiator assignments")
 def list_pssr_assignments(
-    status_filter: Optional[AssignmentStatus] = Query(None, alias="status"),
+    status: Optional[AssignmentStatus] = Query(None, alias="status"),
+    status_filter: Optional[AssignmentStatus] = Query(None),
     user_id: Optional[int] = Query(None),
     project_reference: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    """Return paginated assignment records for admin review."""
+    """Return paginated assignment records for admin review.
+
+    Accepts both `?status=` (aliased) and `?status_filter=` for robustness
+    against older frontend clients.
+    """
+
+    effective_status = status_filter if status_filter is not None else status
 
     assignments, total = InitiatorAssignmentService.list_assignments(
         db=db,
-        status_filter=status_filter,
+        status_filter=effective_status,
         user_id=user_id,
         project_reference=project_reference,
         page=page,

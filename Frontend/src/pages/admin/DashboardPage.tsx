@@ -72,7 +72,7 @@ export const DashboardPage: React.FC = () => {
   }, [allUsers]);
 
   const filteredUsers = useMemo(() => {
-    if (!searchQuery.trim()) return [];
+    if (!searchQuery.trim()) return allUsers;
     const query = searchQuery.toLowerCase();
     return allUsers.filter(
       (u) =>
@@ -199,12 +199,16 @@ export const DashboardPage: React.FC = () => {
           </div>
         )}
 
-        {/* Search Results */}
-        {searchQuery.trim() && !departmentsQuery.isLoading && (
+        {/* Search Results / Default List */}
+        {!departmentsQuery.isLoading && (
           <div className="space-y-2">
             {filteredUsers.length === 0 ? (
               <div className="p-4 text-center text-on-surface-variant">
-                <p className="text-body-sm">No users found matching "{searchQuery}"</p>
+                <p className="text-body-sm">
+                  {searchQuery.trim()
+                    ? `No users found matching "${searchQuery}"`
+                    : 'No users available for initiating PSSR.'}
+                </p>
               </div>
             ) : (
               filteredUsers.map((member) => {
@@ -258,13 +262,6 @@ export const DashboardPage: React.FC = () => {
                 );
               })
             )}
-          </div>
-        )}
-
-        {/* Empty State - No Search */}
-        {!searchQuery.trim() && !departmentsQuery.isLoading && (
-          <div className="p-4 text-center text-on-surface-variant border-t border-outline-variant">
-            <p className="text-body-sm">Enter a name, email, or employee ID to search</p>
           </div>
         )}
       </section>

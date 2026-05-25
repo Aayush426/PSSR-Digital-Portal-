@@ -38,7 +38,7 @@ from app.database.session import check_database_connection
 from app.middleware.exception_handler import register_exception_handlers
 from app.middleware.logging_middleware import RequestLoggingMiddleware
 from app.routes import (
-    auth_router, admin_router, pssr_router,
+    auth_router, admin_router, pssr_router, pssr_initiator_router,
     team_router, area_owner_router, health_router
 )
 from app.core.logging import get_logger
@@ -85,6 +85,12 @@ async def lifespan(app: FastAPI):
     # Ensure schema exists before creating indexes (prevents "no such table: main.users" on fresh DBs)
     try:
         from app.database.database import engine, Base
+        
+        # Import all models to register them with Base before creating tables
+        from app.models.user import User, AssignmentStatus, Department, UserRole  # noqa: F401
+        from app.models.assignment import PSSRInitiatorAssignment  # noqa: F401
+        from app.models.pssr import PSSR, PSSRMember, PSSRAnnoture, PSSRHistory, PSSRStatus  # noqa: F401
+        
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables created/verified")
     except Exception:
@@ -206,6 +212,9 @@ All responses follow the standard envelope:
     # Admin routes — RBAC enforced at router level
     app.include_router(admin_router, prefix=settings.API_PREFIX)
     app.include_router(pssr_router, prefix=settings.API_PREFIX)
+
+    # PSSR Initiator routes — requires PSSR Initiator privilege
+    app.include_router(pssr_initiator_router, prefix=settings.API_PREFIX)
 
     # Team Member routes
     app.include_router(team_router, prefix=settings.API_PREFIX)

@@ -1,9 +1,12 @@
 """
-PSSR assignment routes.
+PSSR routes: initiator assignment management + PSSR workflow.
 
-The current PSSR surface is limited to dynamic initiator assignment management.
-Future workflow endpoints for checklists, approvals, MOC links, and SAP work
-orders can be added here without mixing them into admin user-management routes.
+Contains:
+1. Admin endpoints for managing PSSR initiator assignments
+2. PSSR Initiator endpoints for creating and managing PSSR documents
+3. Future extensions for checklists, approvals, MOC links, SAP integration
+
+Workflow: initiator creates PSSR → adds members → adds annexures → submits
 """
 
 from typing import Optional
@@ -11,21 +14,41 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
-from app.auth.dependencies import require_admin
+from app.auth.dependencies import require_admin, require_pssr_initiator
 from app.core.responses import paginated_response, success_response
 from app.database.session import get_db
 from app.models.user import AssignmentStatus, User
 from app.schemas.auth import AssignInitiatorRequest, RevokeInitiatorRequest
+from app.schemas.pssr import (
+    AddPSSRAnnotureRequest,
+    AddPSSRMemberRequest,
+    CreatePSSRRequest,
+    RemovePSSRAnnotureRequest,
+    RemovePSSRMemberRequest,
+    UpdatePSSRRequest,
+)
 from app.services.initiator_service import InitiatorAssignmentService
+from app.services.pssr_service import PSSRService
 
-router = APIRouter(
+# Admin router: initiator assignment management
+admin_router = APIRouter(
     prefix="/admin/pssr",
     tags=["Admin — PSSR Initiator Management"],
     dependencies=[Depends(require_admin)],
 )
 
+# PSSR Initiator router: PSSR document lifecycle
+pssr_router = APIRouter(
+    prefix="/pssr",
+    tags=["PSSR Initiator — Workflow"],
+    dependencies=[Depends(require_pssr_initiator)],
+)
 
-@router.post(
+# Expose both routers
+router = admin_router
+
+
+@admin_router.post(
     "/assign-initiator",
     status_code=status.HTTP_201_CREATED,
     summary="Assign TEAM_MEMBER as PSSR Initiator",
@@ -47,7 +70,7 @@ def assign_pssr_initiator(
     )
 
 
-@router.post("/revoke-initiator", summary="Revoke PSSR Initiator assignment")
+@admin_router.post("/revoke-initiator", summary="Revoke PSSR Initiator assignment")
 def revoke_pssr_initiator(
     request: RevokeInitiatorRequest,
     db: Session = Depends(get_db),
@@ -62,7 +85,7 @@ def revoke_pssr_initiator(
     )
 
 
-@router.delete(
+@admin_router.delete(
     "/hard-delete-assignment/{assignment_id}",
     summary="Hard delete PSSR initiator assignment (keep User)",
 )
@@ -85,7 +108,7 @@ def hard_delete_assignment(
     )
 
 
-@router.get("/assignments", summary="List PSSR initiator assignments")
+@admin_router.get("/assignments", summary="List PSSR initiator assignments")
 def list_pssr_assignments(
     status: Optional[AssignmentStatus] = Query(None, alias="status"),
     status_filter: Optional[AssignmentStatus] = Query(None),
@@ -117,4 +140,214 @@ def list_pssr_assignments(
         page=page,
         per_page=per_page,
         message=f"Found {total} assignment(s).",
+    )
+
+
+# =========================================================
+# PSSR Initiator Workflow Endpoints
+# =========================================================
+
+
+@pssr_router.post(
+    "/create",
+    status_code=status.HTTP_201_CREATED,
+    summary="Create new PSSR (draft)",
+)
+def create_pssr(
+    request: CreatePSSRRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_pssr_initiator),
+):
+    """
+    Create a new PSSR in DRAFT state.
+
+    Business workflow:
+    1. User selects MOC or Non-MOC type
+    2. Fills PSSR details (number, area, description, etc.)
+    3. Optionally adds team members and annexures
+    4. Saves as draft for continued editing
+
+    Only PSSR Initiators can create PSSRs. Area is pre-populated from initiator profile.
+    """
+
+    pssr = PSSRService.create_pssr(db, request, current_user)
+    return success_response(
+        data=pssr.model_dump(mode="json"),
+        message=f"PSSR {pssr.pssr_number} created successfully in draft state.",
+        status_code=status.HTTP_201_CREATED,
+    )
+
+
+@pssr_router.get("/{pssr_id}", summary="Get PSSR details")
+def get_pssr(
+    pssr_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_pssr_initiator),
+):
+    """Retrieve complete PSSR with all members, annexures, and history."""
+
+    pssr = PSSRService.get_pssr_detail(db, pssr_id)
+    return success_response(
+        data=pssr.model_dump(mode="json"),
+        message="PSSR retrieved successfully.",
+    )
+
+
+@pssr_router.put("/{pssr_id}", summary="Update PSSR (draft only)")
+def update_pssr(
+    pssr_id: int,
+    request: UpdatePSSRRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_pssr_initiator),
+):
+    """
+    Update PSSR details, members, or annexures (draft only).
+
+    Once submitted, only the PSSR Initiator and Area Owner can modify members/annexures.
+    Details are locked after submission.
+    """
+
+    pssr = PSSRService.update_pssr(db, pssr_id, request, current_user)
+    return success_response(
+        data=pssr.model_dump(mode="json"),
+        message="PSSR updated successfully.",
+    )
+
+
+@pssr_router.post("/{pssr_id}/save-draft", summary="Save PSSR as draft")
+def save_draft(
+    pssr_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_pssr_initiator),
+):
+    """Save PSSR as draft for continued editing later."""
+
+    pssr = PSSRService.save_draft(db, pssr_id, current_user)
+    return success_response(
+        data=pssr.model_dump(mode="json"),
+        message="PSSR saved as draft.",
+    )
+
+
+@pssr_router.post("/{pssr_id}/submit", summary="Submit PSSR")
+def submit_pssr(
+    pssr_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_pssr_initiator),
+):
+    """
+    Submit PSSR to team members (DRAFT → TO_DO).
+
+    After submission:
+    - Details are locked and cannot be changed
+    - Only PSSR Initiator and Area Owner can modify members/annexures
+    - PSSR appears on team members' worklists
+    """
+
+    pssr = PSSRService.submit_pssr(db, pssr_id, current_user)
+    return success_response(
+        data=pssr.model_dump(mode="json"),
+        message="PSSR submitted to team members.",
+    )
+
+
+@pssr_router.get("", summary="List initiator's PSSRs")
+def list_my_pssrs(
+    status: Optional[str] = Query(None, description="Filter by status"),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_pssr_initiator),
+):
+    """List all PSSRs created by the current initiator with optional status filter."""
+
+    pssrs, total = PSSRService.list_pssr_by_initiator(
+        db, current_user, status_filter=status, page=page, per_page=per_page
+    )
+    return paginated_response(
+        data=[p.model_dump(mode="json") for p in pssrs],
+        total=total,
+        page=page,
+        per_page=per_page,
+        message=f"Found {total} PSSR(s).",
+    )
+
+
+# =========================================================
+# PSSR Member Management
+# =========================================================
+
+
+@pssr_router.post("/{pssr_id}/members", status_code=status.HTTP_201_CREATED, summary="Add team member to PSSR")
+def add_member(
+    pssr_id: int,
+    request: AddPSSRMemberRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_pssr_initiator),
+):
+    """Add a team member to the PSSR."""
+
+    member = PSSRService.add_member(db, pssr_id, request, current_user)
+    return success_response(
+        data=member.model_dump(mode="json"),
+        message="Team member added to PSSR.",
+        status_code=status.HTTP_201_CREATED,
+    )
+
+
+@pssr_router.delete("/{pssr_id}/members/{member_id}", summary="Remove team member from PSSR")
+def remove_member(
+    pssr_id: int,
+    member_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_pssr_initiator),
+):
+    """Remove a team member from the PSSR."""
+
+    PSSRService.remove_member(
+        db, pssr_id, RemovePSSRMemberRequest(member_id=member_id), current_user
+    )
+    return success_response(
+        data={"member_id": member_id},
+        message="Team member removed from PSSR.",
+    )
+
+
+# =========================================================
+# PSSR Annexure Management
+# =========================================================
+
+
+@pssr_router.post("/{pssr_id}/annexures", status_code=status.HTTP_201_CREATED, summary="Add annexure to PSSR")
+def add_annexure(
+    pssr_id: int,
+    request: AddPSSRAnnotureRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_pssr_initiator),
+):
+    """Add a checklist annexure to the PSSR."""
+
+    annexure = PSSRService.add_annexure(db, pssr_id, request, current_user)
+    return success_response(
+        data=annexure.model_dump(mode="json"),
+        message="Annexure added to PSSR.",
+        status_code=status.HTTP_201_CREATED,
+    )
+
+
+@pssr_router.delete("/{pssr_id}/annexures/{annexure_id}", summary="Remove annexure from PSSR")
+def remove_annexure(
+    pssr_id: int,
+    annexure_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_pssr_initiator),
+):
+    """Soft-delete an annexure from the PSSR (preserves history for re-addition)."""
+
+    PSSRService.remove_annexure(
+        db, pssr_id, RemovePSSRAnnotureRequest(annexure_id=annexure_id), current_user
+    )
+    return success_response(
+        data={"annexure_id": annexure_id},
+        message="Annexure removed from PSSR.",
     )

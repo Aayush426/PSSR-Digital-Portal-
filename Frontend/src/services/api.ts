@@ -7,6 +7,19 @@
  */
 
 import { tokenStore } from '../utils/token';
+import type {
+  PssrAnnexure,
+  PssrAnnexureAddPayload,
+  PssrCreatePayload,
+  PssrDetails,
+  PssrMemberAssignmentPayload,
+  PssrMemberSnapshot,
+  PssrMocType,
+  PssrSaveDraftPayload,
+  PssrSubmitPayload,
+  PssrUpdateDraftPayload,
+  PssrWorkflowState,
+} from '../types/app.types';
 
 export type Role = 'ADMIN' | 'TEAM_MEMBER' | 'AREA_OWNER';
 
@@ -302,5 +315,99 @@ export const api = {
     return request<{ department: string; affected_team_members: number }>(
       `/admin/departments/${encodeURIComponent(department)}`
     );
+  },
+
+  /** =========================
+   * Phase 4/5 PSSR endpoints
+   * ========================= */
+
+  /** TEAM_MEMBER / AREA_OWNER: create a new PSSR draft. */
+  createPssr(payload: PssrCreatePayload): Promise<PssrDetails> {
+    return request<PssrDetails>(`/pssr/create`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /** TEAM_MEMBER / AREA_OWNER: fetch PSSR details. */
+  getPssr(id: number): Promise<PssrDetails> {
+    return request<PssrDetails>(`/pssr/${id}`);
+  },
+
+  /** TEAM_MEMBER / AREA_OWNER: update PSSR draft (draft-only fields). */
+  updatePssrDraft(id: number, payload: PssrUpdateDraftPayload): Promise<PssrDetails> {
+    return request<PssrDetails>(`/pssr/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /** TEAM_MEMBER / AREA_OWNER: save as draft (separate endpoint for UX). */
+  savePssrDraft(id: number, payload: PssrSaveDraftPayload): Promise<PssrDetails> {
+    return request<PssrDetails>(`/pssr/${id}/save-draft`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /** TEAM_MEMBER / AREA_OWNER: submit to team (workflow state transition). */
+  submitPssr(id: number, payload: PssrSubmitPayload = {}): Promise<PssrDetails> {
+    return request<PssrDetails>(`/pssr/${id}/submit`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /** TEAM_MEMBER / AREA_OWNER: list current user's PSSRs. */
+  listMyPssrs(params: {
+    page: number;
+    limit: number;
+    workflow_state?: PssrWorkflowState;
+    status?: PssrWorkflowState;
+  }): Promise<{ records: PssrDetails[]; pagination?: unknown }> {
+    const query = new URLSearchParams();
+    query.set('page', String(params.page));
+    query.set('limit', String(params.limit));
+    if (params.workflow_state) query.set('workflow_state', params.workflow_state);
+    if (params.status) query.set('status', params.status);
+
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    return request<any>(`/pssr${suffix}`);
+  },
+
+  /** TEAM_MEMBER / AREA_OWNER: add member to a PSSR. */
+  addPssrMember(pssrId: number, payload: PssrMemberAssignmentPayload): Promise<PssrMemberSnapshot> {
+    return request<PssrMemberSnapshot>(`/pssr/${pssrId}/members`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /** TEAM_MEMBER / AREA_OWNER: remove member from a PSSR (editable post-submission rules handled by backend). */
+  removePssrMember(pssrId: number, memberAssignmentId: number): Promise<{ id: number }> {
+    return request<{ id: number }>(`/pssr/${pssrId}/members/${memberAssignmentId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  /** TEAM_MEMBER / AREA_OWNER: add annexure to a PSSR. */
+  addPssrAnnexure(
+    pssrId: number,
+    payload: PssrAnnexureAddPayload
+  ): Promise<PssrAnnexure> {
+    return request<PssrAnnexure>(`/pssr/${pssrId}/annexures`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /** TEAM_MEMBER / AREA_OWNER: remove annexure from a PSSR. */
+  removePssrAnnexure(
+    pssrId: number,
+    pssrAnnexureId: number
+  ): Promise<{ id: number }> {
+    return request<{ id: number }>(`/pssr/${pssrId}/annexures/${pssrAnnexureId}`, {
+      method: 'DELETE',
+    });
   },
 };

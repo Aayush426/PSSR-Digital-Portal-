@@ -72,7 +72,7 @@ class Settings:
                 "http://127.0.0.1:3002,"
                 "http://localhost:5173,"
                 "http://127.0.0.1:5173,"
-                "http://10.251.175.178:3000"
+                "http://10.57.6.178:3000"
             ),
         ).split(",")
         if origin.strip()

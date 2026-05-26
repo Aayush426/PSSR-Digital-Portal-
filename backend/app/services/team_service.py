@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 from app.models.pssr import PSSRActivityLog
 from app.models.pssr_task import PSSRTask
 from app.models.user import User, UserRole
+from app.models.permissions import PermissionCode
+from app.repositories.permission_repository import UserPermissionRepository
 from app.schemas.team import (
     TeamDashboardActivity,
     TeamDashboardResponse,
@@ -70,6 +72,12 @@ class TeamService:
             )
             for item in activity_query.order_by(PSSRActivityLog.created_at.desc()).limit(12).all()
         ]
+        is_initiator = UserPermissionRepository.has_permission(
+            db,
+            current_user.id,
+            PermissionCode.INITIATE_PSSR,
+        )
+        initiator_stats = UserPermissionRepository.stats_for_user(db, current_user.id)
 
         return TeamDashboardResponse(
             todo=todo,
@@ -82,6 +90,8 @@ class TeamService:
                 completed_count=len(completed),
                 pending_review_count=sum(1 for task in completed if task.status == "Pending Review"),
             ),
+            is_pssr_initiator=is_initiator,
+            initiator_stats=initiator_stats,
         )
 
     @staticmethod
@@ -114,4 +124,6 @@ class TeamService:
                 completed_count=0,
                 pending_review_count=0,
             ),
+            is_pssr_initiator=False,
+            initiator_stats={},
         )

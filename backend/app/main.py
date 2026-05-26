@@ -35,7 +35,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config.settings import settings
 from app.database.indexes import ensure_user_directory_indexes
 from app.database.init_db import initialize_database_schema
-from app.database.session import check_database_connection
+from app.database.session import SessionLocal, check_database_connection
 from app.middleware.exception_handler import register_exception_handlers
 from app.middleware.logging_middleware import RequestLoggingMiddleware
 from app.routes import (
@@ -43,6 +43,7 @@ from app.routes import (
     team_router, area_owner_router, annexures_router, health_router
 )
 from app.core.logging import get_logger
+from app.services.department_service import DepartmentService
 
 logger = get_logger(__name__)
 
@@ -85,6 +86,9 @@ async def lifespan(app: FastAPI):
     initialize_database_schema()
     logger.info("Database schema: VERIFIED")
     ensure_user_directory_indexes()
+    with SessionLocal() as db:
+        DepartmentService.seed_defaults(db)
+    logger.info("Refinery department structure: VERIFIED")
     logger.info(f"API available at: http://0.0.0.0:8000{settings.API_PREFIX}")
     logger.info(
         f"Swagger UI: http://0.0.0.0:8000/docs "
@@ -134,13 +138,14 @@ Include in all subsequent requests as: `Authorization: Bearer <token>`
 ### Role-Based Access
 | Role | Dashboard | Capabilities |
 |------|-----------|--------------|
-| `ADMIN` | `/admin/dashboard` | Full system access, user management, PSSR assignments |
-| `TEAM_MEMBER` | `/team/dashboard` | PSSR execution; initiator access via assignment |
+| `ADMIN` | `/admin/dashboard` | Full system access, user management, capability grants |
+| `TEAM_MEMBER` | `/team/dashboard` | Department checklist execution; initiator access via `INITIATE_PSSR` capability |
 | `AREA_OWNER` | `/area-owner/dashboard` | PSSR visibility and approval within plant area |
 
 ### PSSR Initiator Model
-`PSSR_INITIATOR` is not a permanent role. TEAM_MEMBERs are dynamically
-assigned as initiators per-project by an ADMIN.
+`PSSR_INITIATOR` is not a permanent role and is not assigned to an existing
+PSSR. ADMIN grants `INITIATE_PSSR` to a TEAM_MEMBER, allowing that user to
+create and own new PSSR workflows.
 
 ### Response Envelope
 All responses follow the standard envelope:

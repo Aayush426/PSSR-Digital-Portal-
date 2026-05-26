@@ -4,6 +4,8 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel
 
+from app.schemas.pssr import InitiatorStats
+
 
 class TeamDashboardTask(BaseModel):
     id: str
@@ -41,3 +43,5 @@ class TeamDashboardResponse(BaseModel):
     completed: List[TeamDashboardTask]
     activity: List[TeamDashboardActivity]
     stats: TeamDashboardStats
+    is_pssr_initiator: bool = False
+    initiator_stats: InitiatorStats = InitiatorStats()

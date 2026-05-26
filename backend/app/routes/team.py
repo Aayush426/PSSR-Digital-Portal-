@@ -2,7 +2,7 @@
 Team Member routes.
 
 TEAM_MEMBER users execute assigned PSSR work. Initiator access is checked
-dynamically through assignments instead of a permanent PSSR_INITIATOR role.
+dynamically through user permissions instead of a permanent PSSR_INITIATOR role.
 """
 
 from fastapi import APIRouter, Depends

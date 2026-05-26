@@ -28,10 +28,22 @@ export interface TeamDashboardStats {
   pending_review_count: number;
 }
 
+export interface InitiatorStats {
+  active_capabilities: number;
+  draft_pssr: number;
+  in_progress: number;
+  pending_area_owner_approval: number;
+  approved: number;
+  open_punch_points: number;
+  my_pssr: number;
+}
+
 export interface TeamDashboardResponse {
   todo: TeamDashboardTask[];
   in_progress: TeamDashboardTask[];
   completed: TeamDashboardTask[];
   activity: TeamDashboardActivity[];
   stats: TeamDashboardStats;
+  is_pssr_initiator: boolean;
+  initiator_stats: InitiatorStats;
 }

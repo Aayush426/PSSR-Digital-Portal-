@@ -73,7 +73,7 @@ export const RoleLayout: React.FC<RoleLayoutProps> = ({ children, currentPath, o
         </div>
       </aside>
 
-      <div className="flex-1 flex flex-col ml-[240px]">
+      <div className="flex-1 flex flex-col ml-60">
         <header className="h-12 bg-surface-container-lowest border-b border-outline-variant flex items-center justify-between px-6 sticky top-0 z-40">
           <div className="flex items-center space-x-2">
             <span className="text-label-md font-bold text-primary tracking-widest uppercase">Operations Workbench</span>
@@ -99,8 +99,11 @@ export const RoleLayout: React.FC<RoleLayoutProps> = ({ children, currentPath, o
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-8 custom-scrollbar relative">
-          <div className="max-w-7xl mx-auto">{children}</div>
+        <main className="flex-1 overflow-y-auto px-6 py-6 lg:px-8">
+          {/* Unified max-width constraint: consistent with AdminLayout */}
+          <div className="w-full mx-auto" style={{ maxWidth: 'var(--container-operational)' }}>
+            {children}
+          </div>
         </main>
       </div>
     </div>

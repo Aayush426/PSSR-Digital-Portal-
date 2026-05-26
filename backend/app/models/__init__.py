@@ -1,4 +1,14 @@
-from app.models.assignment import PSSRInitiatorAssignment
+from app.models.department import (
+    DepartmentActivityLog,
+    DepartmentAnnexureMapping,
+    DepartmentAreaOwnerMapping,
+    DepartmentPermissionConfig,
+    DepartmentRecord,
+    DepartmentUnitMapping,
+    DepartmentWorkflowResponsibility,
+    RefineryUnit,
+)
+from app.models.permissions import PermissionCode, UserPermission
 from app.models.annexures import (
     Annexure,
     AnnexureAuditLog,

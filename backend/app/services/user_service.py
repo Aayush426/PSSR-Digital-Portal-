@@ -9,12 +9,15 @@ from datetime import datetime, timezone
 from math import ceil
 from typing import List, Optional, Tuple
 
-from sqlalchemy import func, or_
+from sqlalchemy import exists, func, or_
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import ResourceNotFoundError
-from app.models.assignment import PSSRInitiatorAssignment
-from app.models.user import AssignmentStatus, User, UserRole
+from app.models.annexures.annexure import Annexure, AnnexureDepartment
+from app.models.permissions import PermissionCode, UserPermission
+from app.models.pssr_task import PSSRTask
+from app.models.user import User, UserRole
+from app.repositories.permission_repository import UserPermissionRepository
 from app.schemas.auth import UserFilterParams, UserProfileResponse, UserUpdateRequest
 
 
@@ -47,16 +50,12 @@ class UserService:
 
     @staticmethod
     def is_pssr_initiator(db: Session, user: User) -> bool:
-        """Check whether a TEAM_MEMBER has any active initiator assignment."""
+        """Check whether a TEAM_MEMBER has active INITIATE_PSSR capability."""
 
-        return (
-            db.query(PSSRInitiatorAssignment)
-            .filter(
-                PSSRInitiatorAssignment.user_id == user.id,
-                PSSRInitiatorAssignment.status == AssignmentStatus.ACTIVE.value,
-            )
-            .first()
-            is not None
+        return UserPermissionRepository.has_permission(
+            db,
+            user.id,
+            PermissionCode.INITIATE_PSSR,
         )
 
     @staticmethod
@@ -130,9 +129,11 @@ class UserService:
         page: int = 1,
         limit: int = 50,
         role: Optional[UserRole] = None,
-        department: Optional[str] = None,
+        department: Optional[str | list[str]] = None,
         active: Optional[bool] = None,
         search: Optional[str] = None,
+        initiator: Optional[bool] = None,
+        plant_area: Optional[str] = None,
     ) -> dict:
         """
         Return a server-paginated directory page.
@@ -151,10 +152,24 @@ class UserService:
             if role:
                 query = query.filter(User.role == role.value)
             if department:
-                dept_value = department.value if hasattr(department, "value") else department
-                query = query.filter(User.department == dept_value)
+                if isinstance(department, list):
+                    dept_values = [item.value if hasattr(item, "value") else item for item in department if item]
+                    query = query.filter(User.department.in_(dept_values))
+                else:
+                    dept_value = department.value if hasattr(department, "value") else department
+                    query = query.filter(User.department == dept_value)
             if active is not None:
                 query = query.filter(User.active == active)
+            if plant_area:
+                plant_value = f"%{plant_area.strip()}%"
+                query = query.filter(User.plant_location.ilike(plant_value))
+            if initiator is not None:
+                has_initiator_permission = exists().where(
+                    UserPermission.user_id == User.id,
+                    UserPermission.permission == PermissionCode.INITIATE_PSSR.value,
+                    UserPermission.active.is_(True),
+                )
+                query = query.filter(has_initiator_permission if initiator else ~has_initiator_permission)
             if search:
                 search_value = f"%{search.strip()}%"
                 query = query.filter(
@@ -191,6 +206,12 @@ class UserService:
             .all()
         )
 
+        active_initiator_ids = UserPermissionRepository.active_user_ids(
+            db,
+            [row.id for row in rows],
+            PermissionCode.INITIATE_PSSR,
+        )
+
         records = [
             {
                 "id": row.id,
@@ -203,7 +224,7 @@ class UserService:
                 "plant_location": row.plant_location,
                 "active": row.active,
                 "dashboard_path": dashboard_path_for_role(row.role),
-                "is_pssr_initiator": False,
+                "is_pssr_initiator": row.id in active_initiator_ids,
                 "last_login_at": (
                     row.last_login_at.isoformat() if row.last_login_at else None
                 ),
@@ -226,7 +247,7 @@ class UserService:
         db: Session,
         department: Optional[str] = None,
     ) -> List[UserProfileResponse]:
-        """Return active TEAM_MEMBER users eligible for initiator assignment."""
+        """Return active TEAM_MEMBER users eligible for department work or capability grants."""
 
         query = db.query(User).filter(
             User.active.is_(True),
@@ -258,9 +279,12 @@ class UserService:
         for field, value in update_dict.items():
             if hasattr(value, "value"):
                 value = value.value
+            if field == "email" and isinstance(value, str):
+                value = value.strip().lower()
             if hasattr(user, field):
                 setattr(user, field, value)
 
+        user.updated_by_user_id = updated_by.id
         user.updated_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(user)
@@ -279,7 +303,120 @@ class UserService:
         if not user:
             raise ResourceNotFoundError("User", user_id)
         user.active = False
+        user.deleted_at = datetime.now(timezone.utc)
+        user.deleted_by_user_id = admin_id
+        user.updated_by_user_id = admin_id
         user.updated_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(user)
         return user
+
+    @staticmethod
+    def set_user_status(db: Session, user_id: int, active: bool, admin_id: int) -> UserProfileResponse:
+        """Enable or disable a user while retaining audit metadata."""
+
+        user = UserService.get_by_id(db, user_id)
+        if not user:
+            raise ResourceNotFoundError("User", user_id)
+        user.active = active
+        user.updated_by_user_id = admin_id
+        user.updated_at = datetime.now(timezone.utc)
+        if active:
+            user.deleted_at = None
+            user.deleted_by_user_id = None
+        else:
+            user.deleted_at = datetime.now(timezone.utc)
+            user.deleted_by_user_id = admin_id
+        db.commit()
+        db.refresh(user)
+        return UserService.build_user_profile(db, user)
+
+    @staticmethod
+    def reset_user_permissions(db: Session, user_id: int, admin_id: int, reason: Optional[str] = None) -> UserProfileResponse:
+        """Revoke all active user capability grants for audit-safe access reset."""
+
+        user = UserService.get_by_id(db, user_id)
+        if not user:
+            raise ResourceNotFoundError("User", user_id)
+        now = datetime.now(timezone.utc)
+        grants = (
+            db.query(UserPermission)
+            .filter(UserPermission.user_id == user_id, UserPermission.active.is_(True))
+            .all()
+        )
+        for grant in grants:
+            grant.active = False
+            grant.revoked_by_user_id = admin_id
+            grant.revoked_at = now
+            grant.revoke_reason = reason or "Permissions reset by admin."
+            grant.updated_at = now
+        user.updated_by_user_id = admin_id
+        user.updated_at = now
+        db.commit()
+        db.refresh(user)
+        return UserService.build_user_profile(db, user)
+
+    @staticmethod
+    def list_department_users_paginated(
+        db: Session,
+        department_name: str,
+        department_code: Optional[str] = None,
+        page: int = 1,
+        limit: int = 25,
+        role: Optional[UserRole] = None,
+        active: Optional[bool] = None,
+        initiator: Optional[bool] = None,
+        plant_area: Optional[str] = None,
+        search: Optional[str] = None,
+    ) -> dict:
+        """Return users for one department with workflow and responsibility rollups."""
+
+        result = UserService.list_users_paginated(
+            db=db,
+            page=page,
+            limit=limit,
+            role=role,
+            department=[item for item in [department_name, department_code] if item],
+            active=active,
+            initiator=initiator,
+            plant_area=plant_area,
+            search=search,
+        )
+        records = result["records"]
+        user_ids = [record["id"] for record in records]
+        workload_by_user = dict(
+            db.query(PSSRTask.assigned_to_user_id, func.count(PSSRTask.id))
+            .filter(PSSRTask.assigned_to_user_id.in_(user_ids))
+            .group_by(PSSRTask.assigned_to_user_id)
+            .all()
+        ) if user_ids else {}
+        pending_by_user = dict(
+            db.query(PSSRTask.assigned_to_user_id, func.count(PSSRTask.id))
+            .filter(
+                PSSRTask.assigned_to_user_id.in_(user_ids),
+                PSSRTask.status.in_(["To Do", "In Progress", "Pending Review"]),
+            )
+            .group_by(PSSRTask.assigned_to_user_id)
+            .all()
+        ) if user_ids else {}
+        annexures = (
+            db.query(Annexure.code, Annexure.title)
+            .join(AnnexureDepartment, AnnexureDepartment.annexure_id == Annexure.id)
+            .filter(
+                AnnexureDepartment.department_id.in_(
+                    [item for item in [department_name, department_code] if item]
+                ),
+                Annexure.active.is_(True),
+                Annexure.is_deleted.is_(False),
+            )
+            .order_by(Annexure.sort_order.asc(), Annexure.number.asc())
+            .limit(12)
+            .all()
+        )
+        responsibilities = [{"code": row.code, "title": row.title} for row in annexures]
+        for record in records:
+            record["operational_unit"] = record.get("plant_location")
+            record["assigned_pssr_count"] = workload_by_user.get(record["id"], 0)
+            record["pending_tasks_count"] = pending_by_user.get(record["id"], 0)
+            record["annexure_responsibilities"] = responsibilities
+        return result

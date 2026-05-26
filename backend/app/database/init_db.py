@@ -21,8 +21,16 @@ from app.models import (  # noqa: F401
     PSSRReviewState,
     PSSRActivityLog,
     PSSRMocReview,
-    PSSRInitiatorAssignment,
     PSSRTask,
+    DepartmentRecord,
+    DepartmentActivityLog,
+    DepartmentAnnexureMapping,
+    DepartmentAreaOwnerMapping,
+    DepartmentPermissionConfig,
+    DepartmentUnitMapping,
+    DepartmentWorkflowResponsibility,
+    RefineryUnit,
+    UserPermission,
     User,
 )
 

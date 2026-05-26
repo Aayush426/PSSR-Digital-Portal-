@@ -13,6 +13,7 @@ const DepartmentsPage = lazy(() => import('./pages/admin/DepartmentsPage').then(
 const AnnexuresPage = lazy(() => import('./pages/admin/AnnexuresPage').then((module) => ({ default: module.AnnexuresPage })));
 const WorkflowConfigurationPage = lazy(() => import('./pages/admin/WorkflowConfigurationPage').then((module) => ({ default: module.WorkflowConfigurationPage })));
 const PSSRRecordsPage = lazy(() => import('./pages/admin/PSSRRecordsPage').then((module) => ({ default: module.PSSRRecordsPage })));
+const PSSRInitiatorManagementPage = lazy(() => import('./pages/admin/PSSRInitiatorManagementPage').then((module) => ({ default: module.PSSRInitiatorManagementPage })));
 const ReportsPage = lazy(() => import('./pages/admin/ReportsPage').then((module) => ({ default: module.ReportsPage })));
 const AuditLogsPage = lazy(() => import('./pages/admin/AuditLogsPage').then((module) => ({ default: module.AuditLogsPage })));
 const SettingsPage = lazy(() => import('./pages/admin/SettingsPage').then((module) => ({ default: module.SettingsPage })));
@@ -64,6 +65,7 @@ export default function App() {
       case '/admin/annexures': return <AnnexuresPage />;
       case '/admin/workflow': return <WorkflowConfigurationPage />;
       case '/admin/pssr': return <PSSRRecordsPage />;
+      case '/admin/pssr-initiators': return <PSSRInitiatorManagementPage />;
       case '/admin/reports': return <ReportsPage />;
       case '/admin/audit': return <AuditLogsPage />;
       case '/admin/settings': return <SettingsPage />;

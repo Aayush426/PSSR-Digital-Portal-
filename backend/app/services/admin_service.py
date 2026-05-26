@@ -11,8 +11,8 @@ from datetime import datetime, timezone
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models.assignment import PSSRInitiatorAssignment
-from app.models.user import AssignmentStatus, User
+from app.models.permissions import PermissionCode, UserPermission
+from app.models.user import User
 
 
 class AdminService:
@@ -28,9 +28,12 @@ class AdminService:
             .group_by(User.role)
             .all()
         )
-        active_assignments = (
-            db.query(PSSRInitiatorAssignment)
-            .filter(PSSRInitiatorAssignment.status == AssignmentStatus.ACTIVE.value)
+        active_initiators = (
+            db.query(UserPermission)
+            .filter(
+                UserPermission.permission == PermissionCode.INITIATE_PSSR.value,
+                UserPermission.active.is_(True),
+            )
             .count()
         )
         department_counts = (
@@ -48,7 +51,7 @@ class AdminService:
             },
             "system_stats": {
                 "users_by_role": {row.role: row.count for row in role_counts},
-                "active_pssr_assignments": active_assignments,
+                "active_pssr_initiators": active_initiators,
                 "users_by_department": {
                     row.department: row.count for row in department_counts
                 },

@@ -4,6 +4,7 @@ import random
 from datetime import datetime, timedelta
 
 from app.database import Base, SessionLocal, engine
+from app.models.permissions import PermissionCode, UserPermission
 from app.models.pssr import PSSRActivityLog, PSSRMocReview
 from app.models.pssr_task import PSSRTask
 from app.models.user import User, UserRole
@@ -55,6 +56,7 @@ def seed_enterprise_tasks(total_tasks: int = TOTAL_TASKS) -> None:
         existing = db.query(PSSRTask).filter(PSSRTask.pssr_id.like("PSSR-VDN-%")).count()
         if existing >= total_tasks:
             seed_moc_reviews(db, area_owners)
+            seed_initiator_capabilities(db, team_members)
             print(f"PSSR task seed skipped: {existing} records already present")
             return
 
@@ -81,6 +83,7 @@ def seed_enterprise_tasks(total_tasks: int = TOTAL_TASKS) -> None:
             db.commit()
 
         seed_moc_reviews(db, area_owners)
+        seed_initiator_capabilities(db, team_members)
         print("Enterprise PSSR task seed completed")
     finally:
         db.close()
@@ -194,6 +197,53 @@ def seed_moc_reviews(db, area_owners: list[User]) -> None:
     ]
     db.bulk_save_objects(reviews)
     db.commit()
+
+
+def seed_initiator_capabilities(db, team_members: list[User]) -> None:
+    """Seed user-centric PSSR initiator capabilities."""
+
+    admin = db.query(User).filter(User.role == UserRole.ADMIN.value, User.active.is_(True)).first()
+    if not admin:
+        return
+
+    existing_count = (
+        db.query(UserPermission)
+        .filter(
+            UserPermission.permission == PermissionCode.INITIATE_PSSR.value,
+            UserPermission.active.is_(True),
+        )
+        .count()
+    )
+    if existing_count >= 6:
+        return
+
+    grants: list[UserPermission] = []
+    for member in team_members[:8]:
+        existing = (
+            db.query(UserPermission)
+            .filter(
+                UserPermission.user_id == member.id,
+                UserPermission.permission == PermissionCode.INITIATE_PSSR.value,
+                UserPermission.active.is_(True),
+            )
+            .first()
+        )
+        if existing:
+            continue
+        grants.append(
+            UserPermission(
+                user_id=member.id,
+                permission=PermissionCode.INITIATE_PSSR.value,
+                active=True,
+                granted_by_user_id=admin.id,
+                grant_reason="Seeded capability for new PSSR workflow creation.",
+            )
+        )
+
+    if grants:
+        db.bulk_save_objects(grants)
+        db.commit()
+        print(f"Seeded {len(grants)} PSSR initiator capability grant(s)")
 
 
 if __name__ == "__main__":

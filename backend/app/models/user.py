@@ -3,14 +3,14 @@ User and role models for the Digital PSSR Portal.
 
 The permanent role model is intentionally small: ADMIN, TEAM_MEMBER, and
 AREA_OWNER. PSSR initiator authority is not represented as a user role because
-it is a temporary operational assignment that must be granted and revoked per
-workflow without rewriting identity records.
+it is a revocable user capability granted through RBAC permissions without
+rewriting identity records.
 """
 
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import Boolean, Column, DateTime, Index, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String
 
 from app.database import Base
 
@@ -84,6 +84,14 @@ class User(Base):
     plant_location = Column(String, nullable=True)
 
     active = Column(Boolean, default=True)
+
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    updated_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    deleted_at = Column(DateTime, nullable=True)
+
+    deleted_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
 

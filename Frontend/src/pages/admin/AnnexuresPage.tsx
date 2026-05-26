@@ -17,6 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { MiniMetric } from '@/components/admin/DepartmentPrimitives';
 import { Skeleton } from '../../components/shared/Skeleton';
 import {
   useAnnexureDetail,
@@ -71,7 +72,7 @@ const EMPTY_SECTION: AnnexureSectionTemplatePayload = {
 };
 
 export const AnnexuresPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'analytics' | 'manage'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'analytics' | 'manage'>();
   const [search, setSearch] = useState('');
   const [department, setDepartment] = useState('');
   const [status, setStatus] = useState<'active' | 'archived' | 'all'>('active');
@@ -124,7 +125,7 @@ export const AnnexuresPage: React.FC = () => {
   };
 
   return (
-    <div className="w-full max-w-[1760px] mx-auto space-y-6 animate-in fade-in duration-500">
+    <div className="w-full max-w-440 mx-auto space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div className="min-w-0">
           <nav className="flex items-center gap-2 text-label-sm font-bold text-on-surface-variant">
@@ -153,7 +154,7 @@ export const AnnexuresPage: React.FC = () => {
         {activeTab === 'overview' && <OverviewTab loading={overview.isLoading} stats={overview.data} search={search} onSearch={setSearch} />}
         {activeTab === 'analytics' && <AnalyticsTab loading={overview.isLoading} stats={overview.data} />}
         {activeTab === 'manage' && (
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(440px,35%)_minmax(0,65%)] h-[calc(100vh-232px)] min-h-[680px] max-h-[1120px] overflow-hidden">
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(440px,35%)_minmax(0,65%)] h-[calc(100vh-232px)] min-h-170 max-h-280 overflow-hidden">
             <div className="xl:border-r border-outline-variant bg-surface-container-low min-w-0 min-h-0 overflow-hidden">
               <AnnexureLibrary
                 annexures={annexures}
@@ -246,7 +247,7 @@ const OverviewTab: React.FC<{ loading: boolean; stats?: AnnexureOverview; search
           <p className="text-xl font-black text-on-surface">Annexure Control Overview</p>
           <p className="text-body-sm text-on-surface-variant mt-1">Operational summary for refinery PSSR annexure governance.</p>
         </div>
-        <div className="relative w-full xl:w-[420px]">
+        <div className="relative w-full xl:w-105">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-outline" />
           <input value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Search master annexures" className="pl-10 pr-4 h-10 border border-outline-variant rounded-md bg-surface-container-lowest text-body-sm w-full outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
         </div>
@@ -654,7 +655,7 @@ const TemplateManager: React.FC<{ annexure: AnnexureDetail; onToast: (message: s
           </div>
           <div className="min-w-0">
             <p className="text-label-sm font-black uppercase text-outline">Active Word Source</p>
-            <p className="text-body-lg font-black text-on-surface break-words mt-1">{annexure.uploaded_template?.file_name ?? 'No active template uploaded'}</p>
+            <p className="text-body-lg font-black text-on-surface wrap-break-words mt-1">{annexure.uploaded_template?.file_name ?? 'No active template uploaded'}</p>
             <p className="text-body-sm text-on-surface-variant mt-2 leading-5">Drop a .doc or .docx file here, or upload a replacement for controlled Rev {annexure.revision}.</p>
             {upload.isPending && (
               <div className="mt-4">
@@ -679,7 +680,7 @@ const TemplateManager: React.FC<{ annexure: AnnexureDetail; onToast: (message: s
             <div key={index} className="relative pl-5">
               <span className="absolute left-0 top-1 h-2.5 w-2.5 rounded-full bg-primary" />
               {index < Math.min((annexure.templates ?? []).length, 5) - 1 && <span className="absolute left-1 top-4 h-[calc(100%+0.5rem)] w-px bg-outline-variant" />}
-              <p className="text-body-sm font-bold text-on-surface break-words">{String(template.file_name ?? 'Template')}</p>
+              <p className="text-body-sm font-bold text-on-surface wrap-break-words">{String(template.file_name ?? 'Template')}</p>
               <p className="text-label-sm font-black uppercase text-outline mt-1">Rev {String(template.version ?? annexure.revision)}</p>
             </div>
           ))}
@@ -738,7 +739,7 @@ const AnnexureEditor: React.FC<{ annexureId?: number; onClose: () => void; onSav
 
   return (
     <div className="fixed inset-0 z-40 bg-black/40 flex justify-end">
-      <div className="w-full max-w-[1280px] bg-surface h-full overflow-auto shadow-2xl">
+      <div className="w-full max-w-7xl bg-surface h-full overflow-auto shadow-2xl">
         <div className="sticky top-0 z-10 bg-surface/95 backdrop-blur border-b border-outline-variant px-6 py-5 flex items-center justify-between gap-4">
           <div>
             <p className="text-xl font-black text-on-surface">{annexureId ? 'Edit Annexure Master' : 'Create Annexure Master'}</p>
@@ -892,7 +893,7 @@ const Toggle: React.FC<{ label: string; checked: boolean; onChange: (value: bool
 const Meta: React.FC<{ label: string; value: string }> = ({ label, value }) => (
   <div className="bg-surface-container-lowest border border-outline-variant rounded-lg p-4 min-h-24 flex flex-col justify-between">
     <p className="text-label-sm font-black uppercase text-outline">{label}</p>
-    <p className="text-body-md font-black text-on-surface mt-3 leading-5 break-words">{value}</p>
+    <p className="text-body-md font-black text-on-surface mt-3 leading-5 wrap-break-words">{value}</p>
   </div>
 );
 
@@ -907,13 +908,6 @@ const Badge: React.FC<{ children: React.ReactNode; tone: 'success' | 'danger' | 
 };
 
 const Chip: React.FC<{ children: React.ReactNode }> = ({ children }) => <span className="inline-flex items-center min-h-7 px-2.5 rounded-md bg-surface-container text-on-surface-variant text-label-sm font-black">{children}</span>;
-
-const MiniMetric: React.FC<{ label: string; value: string | number }> = ({ label, value }) => (
-  <span className="rounded-md border border-outline-variant bg-surface-container-low px-2 py-2">
-    <span className="block text-body-sm font-black text-on-surface truncate">{value}</span>
-    <span className="block text-[10px] font-black uppercase text-outline mt-0.5">{label}</span>
-  </span>
-);
 
 function toPayload(detail: AnnexureDetail): AnnexureMasterPayload {
   return {

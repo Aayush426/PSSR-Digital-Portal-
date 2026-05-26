@@ -128,7 +128,7 @@ def login(
     Use Cases:
     - Frontend fetches this on the portal load to hydrate the user context
     - Frontend re-fetches when user navigates to profile settings
-    - Used to determine if a TEAM_MEMBER currently has initiator privileges or not (dynamic based on assignment table)
+    - Used to determine if a TEAM_MEMBER currently has INITIATE_PSSR capability
     """,
     responses={
         200: {"description": "User profile returned successfully"},
@@ -145,7 +145,7 @@ def get_current_user_profile(
     Includes:
         - Permanent role and department
         - Dashboard path for role-based navigation
-        - is_pssr_initiator flag (dynamic, from assignment table)
+        - is_pssr_initiator flag (dynamic, from user_permissions)
         - Last login timestamp for security display
     """
     profile = AuthService.get_current_user_profile(db, current_user)

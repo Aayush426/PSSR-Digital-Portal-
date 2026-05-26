@@ -6,6 +6,7 @@ import {
   FileText, 
   GitBranch, 
   ClipboardCheck, 
+  UserRoundCheck,
   PieChart, 
   History, 
   Settings 
@@ -19,6 +20,7 @@ export const NAV_ITEMS = [
   { id: 'annexures', name: 'Annexures', icon: FileText, path: '/admin/annexures' },
   { id: 'workflow', name: 'Workflow Configuration', icon: GitBranch, path: '/admin/workflow' },
   { id: 'pssr', name: 'PSSR Records', icon: ClipboardCheck, path: '/admin/pssr' },
+  { id: 'initiators', name: 'PSSR Initiators', icon: UserRoundCheck, path: '/admin/pssr-initiators' },
   { id: 'reports', name: 'Reports', icon: PieChart, path: '/admin/reports' },
   { id: 'audit', name: 'Audit Logs', icon: History, path: '/admin/audit' },
   { id: 'settings', name: 'Settings', icon: Settings, path: '/admin/settings' },

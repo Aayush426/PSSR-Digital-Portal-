@@ -2,7 +2,7 @@
 
 ## 1. MAX-WIDTH CONSTRAINTS
 
-### ❌ BEFORE (Conflicting)
+###  BEFORE (Conflicting)
 ```jsx
 // AdminLayout
 <main className="flex-1 overflow-y-auto px-5 py-6 lg:px-8">
@@ -25,7 +25,7 @@
 - Wastes ~100-140px on right side
 - Hard to adjust globally
 
-### ✅ AFTER (Unified)
+###  AFTER (Unified)
 ```jsx
 // AdminLayout & RoleLayout (identical)
 <main className="flex-1 overflow-y-auto px-6 py-6 lg:px-8">
@@ -53,7 +53,7 @@
 
 ## 2. SPLIT-PANEL LAYOUT
 
-### ❌ BEFORE (Awkward)
+### BEFORE (Awkward)
 ```jsx
 <div className="grid grid-cols-1 xl:grid-cols-[340px_minmax(0,960px)] gap-5 items-start justify-center">
   {/* Sidebar */}
@@ -83,7 +83,7 @@
 - Hard-coded tab layout
 - Duplicate header/footer code
 
-### ✅ AFTER (Clean)
+### AFTER (Clean)
 ```jsx
 <OperationalLayout
   sidebar={
@@ -115,7 +115,7 @@
 
 ## 3. TAB NAVIGATION
 
-### ❌ BEFORE (Wrapping)
+###  BEFORE (Wrapping)
 ```jsx
 {/* Tabs wrap awkwardly on limited width */}
 <div className="sticky top-0 z-20 px-4 border-b border-outline-variant bg-surface-container-lowest/95 backdrop-blur">
@@ -144,7 +144,7 @@
 - Looks unprofessional
 - Hard to scroll on mobile
 
-### ✅ AFTER (Smart Scrolling)
+###  AFTER (Smart Scrolling)
 ```jsx
 <HorizontalTabs
   tabs={TABS}
@@ -166,7 +166,7 @@
 
 ## 4. METRICS GRID
 
-### ❌ BEFORE (Inconsistent)
+### BEFORE (Inconsistent)
 ```jsx
 <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 max-w-280">
   <div className="bg-surface-container-lowest border border-outline-variant rounded p-4 shadow-sm">
@@ -183,7 +183,7 @@
    - Duplicate component per page */}
 ```
 
-### ✅ AFTER (Reusable)
+### AFTER (Reusable)
 ```jsx
 <OperationalGrid columns={4} gap="md">
   <MetricCard label="Users" value={1250} />
@@ -206,7 +206,7 @@
 
 ## 5. INFO PANELS & GRIDS
 
-### ❌ BEFORE (Manual)
+###  BEFORE (Manual)
 ```jsx
 <section className="border border-outline-variant rounded p-4 bg-surface">
   <h3 className="text-label-md font-black uppercase text-on-surface mb-4">Department Metadata</h3>
@@ -226,7 +226,7 @@
 - Inconsistent styling
 - Hard to maintain
 
-### ✅ AFTER (Component-based)
+###  AFTER (Component-based)
 ```jsx
 <InfoPanel title="Department Metadata">
   <ProfileGrid
@@ -252,7 +252,7 @@
 
 ## 6. CONFIG CARDS
 
-### ❌ BEFORE (Duplicated)
+### BEFORE (Duplicated)
 ```jsx
 // In DepartmentsPage - repeated for each config type
 <div className="border border-outline-variant rounded p-4 bg-surface">
@@ -284,7 +284,7 @@
 - Inconsistent styling across pages
 - Hard to update
 
-### ✅ AFTER (Single Component)
+### AFTER (Single Component)
 ```jsx
 <ConfigCard
   title="ANNEX-01 · Checklist A"
@@ -339,14 +339,14 @@ Multiplied across 8 admin pages: ~3000 lines saved
 
 ## 8. RESPONSIVE BEHAVIOR
 
-### ❌ BEFORE (Limited Breakpoints)
+### BEFORE (Limited Breakpoints)
 ```jsx
 // Split-panel only at xl breakpoint - no tablet support
 <div className="grid grid-cols-1 xl:grid-cols-[340px_minmax(0,960px)]">
 ```
 **Problem**: Mobile → Desktop jump (no tablet state)
 
-### ✅ AFTER (Full Responsive)
+### AFTER (Full Responsive)
 ```jsx
 <OperationalLayout
   sidebar={...}
@@ -368,7 +368,7 @@ Multiplied across 8 admin pages: ~3000 lines saved
 
 ## 9. SPACING CONSISTENCY
 
-### ❌ BEFORE (No Scale)
+###  BEFORE (No Scale)
 ```jsx
 // Inconsistent spacing throughout codebase
 <div className="px-4 lg:px-6"> {/* page */}
@@ -381,7 +381,7 @@ Multiplied across 8 admin pages: ~3000 lines saved
 // Result: Chaotic, no visual rhythm
 ```
 
-### ✅ AFTER (8px Grid)
+### AFTER (8px Grid)
 ```jsx
 // Consistent spacing scale
 --spacing-sm: 8px (gap-2)
@@ -403,17 +403,17 @@ Multiplied across 8 admin pages: ~3000 lines saved
 
 | Aspect | Before | After | Improvement |
 |--------|--------|-------|-------------|
-| **Max-width conflicts** | 2 levels (1800 + 1440) | 1 level (1600) | ✅ Unified |
-| **Viewport usage** | 1300/1600px used | 1400-1500/1600px | ✅ +30% better |
-| **Tab wrapping** | 8 tabs → 2 rows | 8 tabs → 1 row | ✅ Professional |
-| **Responsive states** | 2 (mobile/desktop) | 4 (sm/md/lg/xl) | ✅ Complete |
-| **Split-panel logic** | Manual grid | Automated layout | ✅ Reusable |
-| **Metric cards** | Duplicated per page | Shared component | ✅ 80% saved |
-| **Info panels** | Manual markup | ProfileGrid component | ✅ 85% saved |
-| **Config cards** | 20+ lines each | 8 lines each | ✅ 60% saved |
-| **Spacing consistency** | No scale (chaotic) | 8px grid (professional) | ✅ Enterprise-grade |
-| **DepartmentsPage LOC** | 1106 lines | 600 lines | ✅ 46% reduction |
-| **Reusability** | None | 8 new components | ✅ Scalable |
+| **Max-width conflicts** | 2 levels (1800 + 1440) | 1 level (1600) | Unified |
+| **Viewport usage** | 1300/1600px used | 1400-1500/1600px |  +30% better |
+| **Tab wrapping** | 8 tabs → 2 rows | 8 tabs → 1 row | Professional |
+| **Responsive states** | 2 (mobile/desktop) | 4 (sm/md/lg/xl) |  Complete |
+| **Split-panel logic** | Manual grid | Automated layout |  Reusable |
+| **Metric cards** | Duplicated per page | Shared component | 80% saved |
+| **Info panels** | Manual markup | ProfileGrid component | 85% saved |
+| **Config cards** | 20+ lines each | 8 lines each | 60% saved |
+| **Spacing consistency** | No scale (chaotic) | 8px grid (professional) |  Enterprise-grade |
+| **DepartmentsPage LOC** | 1106 lines | 600 lines |  46% reduction |
+| **Reusability** | None | 8 new components |  Scalable |
 
 ---
 

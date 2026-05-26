@@ -1,6 +1,6 @@
 # Quick Start Guide - Using New Layout Components
 
-## 🚀 30-Second Rundown
+## 30-Second Rundown
 
 You now have 3 powerful reusable layout components:
 
@@ -12,7 +12,7 @@ All are production-ready and fully documented.
 
 ---
 
-## 📋 Copy-Paste Templates
+##  Copy-Paste Templates
 
 ### Template 1: List + Detail Page (e.g., UsersPage, RolesPage)
 
@@ -165,7 +165,7 @@ export const DashboardPage: React.FC = () => {
 
 ---
 
-## 🎯 Migration Checklist for Each Page
+## Migration Checklist for Each Page
 
 - [ ] Remove `max-w-[...]` from outer page div
 - [ ] Replace manual sidebar/detail with `<OperationalLayout>`
@@ -179,7 +179,7 @@ export const DashboardPage: React.FC = () => {
 
 ---
 
-## 📍 Component Locations
+##  Component Locations
 
 ```
 Frontend/src/components/layouts/OperationalLayout.tsx
@@ -201,7 +201,7 @@ Frontend/src/components/layouts/GridSystem.tsx
 
 ---
 
-## 🎨 Component Variants
+##  Component Variants
 
 ### MetricCard
 ```tsx
@@ -233,7 +233,7 @@ Frontend/src/components/layouts/GridSystem.tsx
 
 ---
 
-## 🔧 Customization
+## Customization
 
 ### Change sidebar width
 ```tsx
@@ -265,7 +265,7 @@ Frontend/src/components/layouts/GridSystem.tsx
 
 ---
 
-## ✅ Verification Checklist
+##  Verification Checklist
 
 After refactoring a page:
 
@@ -281,20 +281,20 @@ After refactoring a page:
 
 ---
 
-## 📚 Reference Pages
+## Reference Pages
 
 | Page | Status | Reference |
 |------|--------|-----------|
-| DepartmentsPage | ✅ Refactored | Use as template |
-| LAYOUT_ARCHITECTURE_GUIDE.md | 📖 Complete guide | Read for details |
-| REFACTORING_SUMMARY.md | 📊 Full summary | See what was done |
-| BEFORE_AFTER_COMPARISON.md | 🔄 Visual comparison | See improvements |
+| DepartmentsPage |  Refactored | Use as template |
+| LAYOUT_ARCHITECTURE_GUIDE.md | Complete guide | Read for details |
+| REFACTORING_SUMMARY.md | Full summary | See what was done |
+| BEFORE_AFTER_COMPARISON.md | Visual comparison | See improvements |
 
 ---
 
-## 🚀 Next Pages to Convert (Priority Order)
+## Next Pages to Convert (Priority Order)
 
-1. **UsersPage** - Simple list + detail ⭐ (start here)
+1. **UsersPage** - Simple list + detail  
 2. **RolesPermissionsPage** - List + tabs
 3. **AnnexuresPage** - Grid view + detail
 4. **WorkflowConfigurationPage** - Workflows + config
@@ -305,7 +305,7 @@ After refactoring a page:
 
 ---
 
-## ⚡ Quick Command Reference
+## Quick Command Reference
 
 ```bash
 # Build to verify changes
@@ -320,7 +320,7 @@ npm run build 2>&1 | grep -i error
 
 ---
 
-## 🎓 Learn More
+##  Learn More
 
 1. Read `LAYOUT_ARCHITECTURE_GUIDE.md` for detailed explanations
 2. Study `DepartmentsPage.tsx` for real-world implementation
@@ -329,34 +329,34 @@ npm run build 2>&1 | grep -i error
 
 ---
 
-## 💡 Common Mistakes to Avoid
+## Common Mistakes to Avoid
 
-❌ **Don't** add `max-w-[...]` inside pages
-✅ **Do** let AdminLayout/RoleLayout handle max-width
+ **Don't** add `max-w-[...]` inside pages
+ **Do** let AdminLayout/RoleLayout handle max-width
 
-❌ **Don't** use flex-wrap for tabs
-✅ **Do** use HorizontalTabs for 5+ tabs
+ **Don't** use flex-wrap for tabs
+ **Do** use HorizontalTabs for 5+ tabs
 
-❌ **Don't** create custom Metric/Card components
-✅ **Do** use GridSystem components
+ **Don't** create custom Metric/Card components
+ **Do** use GridSystem components
 
-❌ **Don't** mix spacing (px-4, px-5, px-6, px-7)
-✅ **Do** use gap-2, gap-3, gap-4 consistently
+ **Don't** mix spacing (px-4, px-5, px-6, px-7)
+ **Do** use gap-2, gap-3, gap-4 consistently
 
-❌ **Don't** nest scrollable containers
-✅ **Do** keep single overflow-y-auto on main
+ **Don't** nest scrollable containers
+ **Do** keep single overflow-y-auto on main
 
 ---
 
-## 🎯 Success = DepartmentsPage As Template
+##  Success = DepartmentsPage As Template
 
 If your refactored page looks and behaves like DepartmentsPage, you've done it right!
 
-✅ Professional split-panel layout
-✅ Clean tab navigation
-✅ Responsive metrics
-✅ Consistent spacing
-✅ Production-ready
+Professional split-panel layout
+ Clean tab navigation
+ Responsive metrics
+ Consistent spacing
+ Production-ready
 
 ---
 

@@ -1,71 +1,46 @@
-"""
-PSSR initiator assignment service.
-
-This service protects the rule that initiator access is dynamic assignment
-state, not a permanent role. That model scales to future project scopes,
-shutdown packages, MOC references, and audit trails.
-"""
+"""Business service for user-centric PSSR initiator capability."""
 
 from datetime import datetime, timezone
-from typing import List, Optional, Tuple
+from typing import Optional
 
-from sqlalchemy.orm import Session
+from sqlalchemy import exists, func, or_
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.exceptions import ConflictError, ResourceNotFoundError, ValidationError
-from app.models.assignment import PSSRInitiatorAssignment
-from app.models.user import AssignmentStatus, User, UserRole
-from app.schemas.auth import (
-    AssignInitiatorRequest,
-    InitiatorAssignmentResponse,
-    RevokeInitiatorRequest,
-)
+from app.models.permissions import PermissionCode, UserPermission
+from app.models.user import User, UserRole
+from app.repositories.permission_repository import UserPermissionRepository
+from app.schemas.pssr import InitiatorCapabilityResponse
 
 
-class InitiatorAssignmentService:
-    """Business operations for assigning and revoking PSSR initiators."""
+class InitiatorCapabilityService:
+    """Grant, revoke, list, and report INITIATE_PSSR capability."""
 
     @staticmethod
-    def _to_response(assignment: PSSRInitiatorAssignment) -> InitiatorAssignmentResponse:
-        """Convert an assignment row into an API-safe response projection."""
-
-        return InitiatorAssignmentResponse(
-            id=assignment.id,
-            user_id=assignment.user_id,
-            user_employee_id=assignment.user.employee_id,
-            user_full_name=assignment.user.full_name,
-            project_reference=assignment.project_reference,
-            status=assignment.status,
-            reason=assignment.reason,
-            assigned_at=assignment.assigned_at,
-            revoked_at=assignment.revoked_at,
-        )
-
-    @staticmethod
-    def assign_initiator(
+    def grant_initiator_access(
         db: Session,
-        request: AssignInitiatorRequest,
+        user_id: int,
         current_admin: User,
-    ) -> InitiatorAssignmentResponse:
-        """Assign an active TEAM_MEMBER as a temporary PSSR initiator."""
+        reason: Optional[str] = None,
+    ) -> InitiatorCapabilityResponse:
+        """Grant a TEAM_MEMBER permission to create and own new PSSR workflows."""
 
-        user = db.query(User).filter(User.id == request.user_id).first()
+        user = db.query(User).filter(User.id == user_id).first()
         if not user:
-            raise ResourceNotFoundError("User", request.user_id)
-        if not user.active or user.role != UserRole.TEAM_MEMBER.value:
-            raise ValidationError("Only active TEAM_MEMBER users can be initiators.")
-
-        duplicate = (
-            db.query(PSSRInitiatorAssignment)
-            .filter(
-                PSSRInitiatorAssignment.user_id == user.id,
-                PSSRInitiatorAssignment.project_reference == request.project_reference,
-                PSSRInitiatorAssignment.status == AssignmentStatus.ACTIVE.value,
-            )
-            .first()
+            raise ResourceNotFoundError("User", user_id)
+        if not user.active:
+            raise ValidationError("Only active users can receive PSSR initiator access.")
+        if user.role != UserRole.TEAM_MEMBER.value:
+            raise ValidationError("Only TEAM_MEMBER users can receive PSSR initiator access.")
+        existing = UserPermissionRepository.active_grant(
+            db,
+            user.id,
+            PermissionCode.INITIATE_PSSR,
         )
-        if duplicate:
-            raise ConflictError("An active initiator assignment already exists.")
+        if existing:
+            raise ConflictError("This TEAM_MEMBER already has PSSR initiator access.")
 
+<<<<<<< HEAD
         if request.project_reference:
             active_count = (
                 db.query(PSSRInitiatorAssignment)
@@ -79,47 +54,59 @@ class InitiatorAssignmentService:
                 raise ValidationError("Maximum active initiators reached for project.")
 
         assignment = PSSRInitiatorAssignment(
+=======
+        grant = UserPermission(
+>>>>>>> 9b293bf (Refactor enterprise department workflows and improve PSSR admin UX)
             user_id=user.id,
-            assigned_by_id=current_admin.id,
-            project_reference=request.project_reference,
-            status=AssignmentStatus.ACTIVE.value,
-            reason=request.reason,
+            permission=PermissionCode.INITIATE_PSSR.value,
+            active=True,
+            granted_by_user_id=current_admin.id,
+            grant_reason=reason,
         )
-        db.add(assignment)
+        db.add(grant)
         db.commit()
-        db.refresh(assignment)
-        return InitiatorAssignmentService._to_response(assignment)
+        return InitiatorCapabilityService._to_response(db, user)
 
     @staticmethod
-    def revoke_initiator(
+    def revoke_initiator_access(
         db: Session,
-        request: RevokeInitiatorRequest,
+        user_id: int,
         current_admin: User,
-    ) -> InitiatorAssignmentResponse:
-        """Revoke an active assignment while retaining the audit record."""
+        reason: Optional[str] = None,
+    ) -> InitiatorCapabilityResponse:
+        """Disable future PSSR creation while preserving grant history."""
 
-        assignment = (
-            db.query(PSSRInitiatorAssignment)
-            .filter(PSSRInitiatorAssignment.id == request.assignment_id)
-            .first()
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise ResourceNotFoundError("User", user_id)
+        grant = UserPermissionRepository.active_grant(
+            db,
+            user.id,
+            PermissionCode.INITIATE_PSSR,
         )
+<<<<<<< HEAD
         if not assignment:
             raise ResourceNotFoundError(
                 "PSSR initiator assignment", request.assignment_id
             )
         if assignment.status != AssignmentStatus.ACTIVE.value:
             raise ConflictError("Only active assignments can be revoked.")
+=======
+        if not grant:
+            raise ConflictError("This user does not have active PSSR initiator access.")
+>>>>>>> 9b293bf (Refactor enterprise department workflows and improve PSSR admin UX)
 
-        assignment.status = AssignmentStatus.REVOKED.value
-        assignment.revoked_by_id = current_admin.id
-        assignment.revoked_at = datetime.now(timezone.utc)
-        if request.reason:
-            assignment.reason = request.reason
+        now = datetime.now(timezone.utc)
+        grant.active = False
+        grant.revoked_by_user_id = current_admin.id
+        grant.revoked_at = now
+        grant.revoke_reason = reason
+        grant.updated_at = now
         db.commit()
-        db.refresh(assignment)
-        return InitiatorAssignmentService._to_response(assignment)
+        return InitiatorCapabilityService._to_response(db, user)
 
     @staticmethod
+<<<<<<< HEAD
     def hard_delete_assignment(db: Session, assignment_id: int) -> int:
         """Hard delete an initiator assignment row while keeping the User row.
 
@@ -140,34 +127,109 @@ class InitiatorAssignmentService:
 
     @staticmethod
     def list_assignments(
+=======
+    def list_initiators(
+>>>>>>> 9b293bf (Refactor enterprise department workflows and improve PSSR admin UX)
         db: Session,
-        status_filter: Optional[AssignmentStatus] = None,
-        user_id: Optional[int] = None,
-        project_reference: Optional[str] = None,
+        *,
+        active: Optional[bool] = True,
+        department: Optional[str] = None,
+        search: Optional[str] = None,
         page: int = 1,
-        per_page: int = 20,
-    ) -> Tuple[List[InitiatorAssignmentResponse], int]:
-        """Return paginated assignment records for the admin console."""
+        limit: int = 25,
+    ) -> tuple[list[InitiatorCapabilityResponse], int]:
+        """Return TEAM_MEMBER users with or without INITIATE_PSSR capability."""
 
-        query = db.query(PSSRInitiatorAssignment)
-        if status_filter:
-            query = query.filter(PSSRInitiatorAssignment.status == status_filter.value)
-        if user_id:
-            query = query.filter(PSSRInitiatorAssignment.user_id == user_id)
-        if project_reference:
+        page = max(page, 1)
+        limit = min(max(limit, 1), 100)
+        query = db.query(User).filter(User.role == UserRole.TEAM_MEMBER.value)
+        permission_exists = exists().where(
+            UserPermission.user_id == User.id,
+            UserPermission.permission == PermissionCode.INITIATE_PSSR.value,
+            UserPermission.active.is_(True),
+        )
+        if active is True:
+            query = query.filter(permission_exists)
+        elif active is False:
+            query = query.filter(~permission_exists)
+        if department:
+            query = query.filter(User.department == department)
+        if search:
+            pattern = f"%{search.strip()}%"
             query = query.filter(
-                PSSRInitiatorAssignment.project_reference == project_reference
+                or_(User.full_name.ilike(pattern), User.email.ilike(pattern), User.employee_id.ilike(pattern))
             )
 
         total = query.count()
-        assignments = (
-            query.order_by(PSSRInitiatorAssignment.assigned_at.desc())
-            .offset((page - 1) * per_page)
-            .limit(per_page)
+        users = (
+            query.order_by(User.department.asc(), User.full_name.asc())
+            .offset((page - 1) * limit)
+            .limit(limit)
             .all()
         )
+<<<<<<< HEAD
         return [
             InitiatorAssignmentService._to_response(assignment)
             for assignment in assignments
         ], total
 
+=======
+        return [InitiatorCapabilityService._to_response(db, user) for user in users], total
+
+    @staticmethod
+    def is_active_initiator(db: Session, user_id: int) -> bool:
+        return UserPermissionRepository.has_permission(
+            db,
+            user_id,
+            PermissionCode.INITIATE_PSSR,
+        )
+
+    @staticmethod
+    def _to_response(db: Session, user: User) -> InitiatorCapabilityResponse:
+        grant = (
+            db.query(UserPermission)
+            .options(joinedload(UserPermission.granted_by))
+            .filter(
+                UserPermission.user_id == user.id,
+                UserPermission.permission == PermissionCode.INITIATE_PSSR.value,
+            )
+            .order_by(UserPermission.active.desc(), UserPermission.granted_at.desc())
+            .first()
+        )
+        return InitiatorCapabilityResponse(
+            user_id=user.id,
+            employee_id=user.employee_id,
+            full_name=user.full_name,
+            email=user.email,
+            department=user.department,
+            designation=user.designation,
+            plant_location=user.plant_location,
+            is_active=bool(grant and grant.active),
+            granted_at=grant.granted_at if grant else None,
+            granted_by_full_name=grant.granted_by.full_name if grant and grant.granted_by else None,
+            revoked_at=grant.revoked_at if grant else None,
+            statistics=UserPermissionRepository.stats_for_user(db, user.id),
+        )
+
+    @staticmethod
+    def capability_counts(db: Session) -> dict:
+        """Small admin statistics block for initiator governance."""
+
+        active_initiators = (
+            db.query(func.count(UserPermission.id))
+            .filter(
+                UserPermission.permission == PermissionCode.INITIATE_PSSR.value,
+                UserPermission.active.is_(True),
+            )
+            .scalar()
+            or 0
+        )
+        return {
+            "active_initiators": active_initiators,
+            "draft_pssr": 0,
+            "in_progress": 0,
+            "pending_area_owner_approval": 0,
+            "approved": 0,
+            "open_punch_points": 0,
+        }
+>>>>>>> 9b293bf (Refactor enterprise department workflows and improve PSSR admin UX)

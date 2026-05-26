@@ -95,7 +95,7 @@ function getPolicyAccess(role: string, moduleId: string, permission: string): bo
   /**
    * Deterministic policy projection for the current RBAC model.
    *
-   * PSSR initiator is intentionally absent here because it is dynamic assignment
+   * PSSR initiator is intentionally absent here because it is a user capability
    * state for TEAM_MEMBER users, not a permanent role in the identity model.
    */
   if (role === 'Admin') return true;

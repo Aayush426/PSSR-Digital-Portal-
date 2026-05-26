@@ -1,170 +1,164 @@
 # Digital PSSR Portal
 
-Enterprise-grade Digital Pre Startup Safety Review (PSSR) platform designed for refinery and industrial operations environments.
+Enterprise Digital Pre Startup Safety Review platform for refinery operations.
 
-The platform digitizes and standardizes the complete PSSR lifecycle including personnel authorization, workflow approvals, safety verification, auditability, operational documentation, and department-level coordination.
+The portal follows the SRS workflow: admins manage users, refinery structure, annexure masters, department orchestration, and workflow permissions; PSSR initiators create new PSSR workflows; department members complete assigned annexures; area owners review, approve, reject, or send work back; punch points remain tracked until closure.
 
-Built with a scalable enterprise architecture using React, FastAPI, PostgreSQL, and RBAC-driven access control.
+## Architecture
 
----
+The application is split into a React frontend and FastAPI backend.
 
-# Enterprise Objectives
+```text
+Frontend/
+  src/pages/admin/DepartmentsPage.tsx
+  src/pages/admin/PSSRInitiatorManagementPage.tsx
+  src/pages/admin/AnnexuresPage.tsx
+  src/pages/team/DashboardPage.tsx
+  src/pages/area-owner/DashboardPage.tsx
+  src/services/api.ts
+  src/hooks/
 
-The Digital PSSR Portal is being developed to solve operational and compliance challenges in industrial refinery environments by providing:
+backend/app/
+  models/
+  routes/
+  schemas/
+  services/
+  repositories/
+  database/
+  scripts/
+```
 
-- Centralized PSSR workflow management
-- Enterprise-grade role-based authorization
-- Secure authentication and session handling
-- Department-level operational visibility
-- Audit logging and traceability
-- Scalable process automation
-- Cross-functional refinery coordination
-- Future-ready DevSecOps deployment architecture
+Core principles:
 
----
+- RBAC and capability checks are enforced by backend dependencies and services.
+- PSSR initiator access is user-centric, not PSSR-record-centric.
+- Department configuration is the operational orchestration layer.
+- Annexure master templates are global, while department visibility and ownership are configurable.
+- Annexure execution is PSSR-specific.
+- Soft deletion and audit logs preserve compliance history.
 
-# Current Development Status
+## Department Architecture
 
-## Phase 1 Completed
-### Enterprise Frontend + Backend Foundation
+The Department module is not simple CRUD. It is the system of record for refinery organization, operational visibility, workflow routing, annexure responsibility, checklist ownership, area-owner approval routing, and department-level RBAC.
 
-The project currently includes a fully integrated enterprise application foundation with:
+### UI Structure
 
-- React frontend architecture
-- FastAPI backend architecture
-- PostgreSQL integration
-- JWT authentication
-- RBAC authorization system
-- Enterprise dashboard routing
-- Protected application routes
-- Live backend API integration
-- Paginated enterprise user directory
-- Cached frontend data layer
-- Virtualized rendering for large datasets
-- Skeleton loaders and Suspense boundaries
-- Centralized logging and middleware
-- Scalable modular backend structure
+The Department page uses a centered enterprise workspace instead of an edge-to-edge admin table.
 
----
+Responsive structure:
 
-# Enterprise Features Implemented
+```text
+Centered page shell, max width 1440px
+  Header and primary actions
+  KPI grid, max width 1120px
+  Workspace grid
+    Left department navigator, 320px-340px, internal vertical scroll
+    Right department detail workspace, max width 960px
+      Sticky wrapping tab navigation
+      Section cards and compact configuration drawers
+      Internal scrolling only for long personnel/configuration lists
+```
 
-## Authentication & Security
+Reusable frontend layout pieces in `Frontend/src/pages/admin/DepartmentsPage.tsx`:
 
-- JWT Bearer authentication
-- Role-based access control (RBAC)
-- Protected frontend routing
-- Session token persistence
-- Centralized authentication middleware
-- Backend authorization dependencies
-- Enterprise login gateway UI
-- Secure password hashing using bcrypt
-- FastAPI dependency-based authorization
-- Token-aware API service layer
+- `DepartmentCard`: navigation card for the left department rail.
+- `TeamMemberCard`: compact personnel row replacement that groups identity, workflow role, unit, workload, and a single action menu.
+- `ConfigCard`: reusable workflow/annexure/unit/permission/area-owner configuration card.
+- `InfoPanel`: bounded metadata and workload sections.
+- `ActivityList`: audit and workflow activity feed.
+- `DialogShell`: centered, constrained modal shell for department and mapping forms.
 
----
+Responsive strategy:
 
-## User & Access Management
+- The page is capped at `1440px` and centered to avoid unreadable ultra-wide scanning.
+- The detail workspace is capped at `960px`, keeping the operator's eye movement local to the active department.
+- The left department list becomes normal stacked content below laptop/tablet breakpoints and sticky fixed-width navigation on wide screens.
+- Team members are rendered as stacked operational cards, not wide tables.
+- Advanced filters are collapsible so the toolbar remains compact during normal review.
+- Tabs wrap into readable buttons instead of forcing horizontal scrolling.
+- Annexure visibility is summarized by counts and configuration cards rather than dense chip walls.
 
-- Enterprise personnel directory
-- PostgreSQL-backed live user system
-- Server-side pagination
-- Department filtering
-- Search functionality
-- Role segregation:
-  - ADMIN
-  - AREA_OWNER
-  - TEAM_MEMBER
-- User virtualization using `react-window`
-- Cached server state using `TanStack Query`
-- Dynamic enterprise dashboards per role
+Screenshot capture guidance:
 
----
+- Desktop/laptop: capture the centered workspace with the department rail and detail panel visible.
+- 1366px width: confirm the workspace remains centered and no horizontal page scroll appears.
+- Tablet landscape: confirm department navigation stacks above or beside the detail panel without clipped actions.
+- Team Members tab: confirm cards show left identity, center role/unit/initiator, right workload/actions.
 
-## Frontend Architecture
+The admin detail panel contains:
 
-- Modular scalable React architecture
-- Shared component system
-- Layout abstraction
-- Protected route wrappers
-- Role routers
-- Enterprise navigation sidebar
-- Responsive admin dashboard
-- Reusable loading skeletons
-- Lazy-loaded routes with Suspense
-- Type-safe TypeScript architecture
+- Overview
+- Team Members
+- Annexures
+- Operational Units
+- Workflow Responsibilities
+- Permissions & Visibility
+- Area Owners
+- Activity History
 
----
+Department API responses include metadata, personnel counts, initiator counts, area-owner counts, workload metrics, mapped annexures, operational units, workflow responsibilities, permission policies, area-owner mappings, and activity history.
 
-## Backend Architecture
+## Database Relationships
 
-- FastAPI enterprise backend
-- SQLAlchemy ORM integration
-- PostgreSQL database integration
-- Modular route architecture
-- Centralized settings management
-- Structured middleware system
-- Request logging middleware
-- Exception handling middleware
-- Enterprise service layer architecture
-- Health check endpoints
-- Scalable API prefixing strategy
+Department orchestration tables:
 
----
+- `departments`: department master, code, name, active state, soft-delete metadata.
+- `refinery_units`: operational units and zones visible during PSSR creation.
+- `department_unit_mappings`: department-to-unit visibility, workflow scope, unit area owner, active state, soft delete.
+- `department_annexure_mappings`: department-to-annexure many-to-many mapping, mandatory/optional flag, visibility scope, checklist owner role, workflow stage, priority, active state, soft delete.
+- `department_workflow_responsibilities`: workflow stage responsibility matrix, owner role, escalation role, due-day ownership, punch-point owner, approval requirement, active state, soft delete.
+- `department_permission_configs`: department-level RBAC capabilities by role and scope.
+- `department_area_owner_mappings`: area-owner approval and escalation routing by department and optional operational unit.
+- `department_activity_logs`: append-only audit feed for orchestration changes.
 
-## Performance Optimizations
+Related workflow tables:
 
-- Paginated backend queries
-- Bounded SQL reads
-- Query projection optimization
-- Indexed user directory fields
-- Debounced frontend searching
-- React Query caching
-- Virtualized rendering for large tables
-- Skeleton UI loading states
-- Optimized API response contracts
+- `users`: permanent identity, role, department, operational location, active and soft-delete metadata.
+- `user_permissions`: auditable capability grants and revocations.
+- `annexures`: global annexure master templates.
+- `annexure_departments`: legacy/global annexure visibility seed source.
+- `pssr_tasks`: assigned workflow/checklist records.
+- `annexure_punch_points`: punch points with owning department.
 
----
+## RBAC Model
 
-# Tech Stack
+Permanent roles:
 
-## Frontend
+- `ADMIN`
+- `TEAM_MEMBER`
+- `AREA_OWNER`
 
-- React 19
-- TypeScript
-- Vite
-- Tailwind CSS v4
-- TanStack Query
-- React Window
-- Framer Motion
-- Lucide React
+Capability codes include:
 
----
+- `VIEW_PSSR`
+- `EDIT_ASSIGNED_CHECKLIST`
+- `CREATE_PUNCH_POINT`
+- `UPLOAD_EVIDENCE`
+- `CLOSE_CHECKLIST`
+- `CREATE_PSSR`
+- `INITIATE_PSSR`
+- `APPROVE_PSSR`
+- `MANAGE_DEPARTMENT_USERS`
+- `MANAGE_ASSIGNED_DEPARTMENTS`
+- `REVIEW_PSSR`
 
-## Backend
+Department permission configuration stores which role can perform each capability within department scope. User-specific capability grants are stored separately in `user_permissions`.
 
-- FastAPI
-- SQLAlchemy
-- PostgreSQL
-- Pydantic
-- Passlib
-- JWT Authentication
-- Uvicorn
+## Initiator Capability Model
 
----
+A PSSR Initiator is:
 
-## Testing & QA
+```text
+TEAM_MEMBER + active INITIATE_PSSR permission
+```
 
-- Playwright
-- Manual QA Documentation
-- Smoke Testing
-- Route Verification
-- Backend Health Checks
+Initiator is not a PSSR assignment and is not a permanent role. Admins enable or revoke initiator access from the PSSR Initiator page or Department Team Members tab.
 
----
+Once enabled, the user can create new PSSR workflows. The creation flow must use department configuration to determine available departments, operational units, visible annexures, default checklist ownership, candidate team members, and area-owner routing.
 
-# Project Structure
+## Annexure Mapping System
 
+<<<<<<< HEAD
 ```bash
 digital-pssr/
 │
@@ -200,3 +194,180 @@ digital-pssr/
 ├── docs/
 ├── architecture/
 └── README.md
+=======
+Annexures are globally managed in the Annexure module. Department-specific behavior is configured in `department_annexure_mappings`.
+
+Each mapping supports:
+
+- many-to-many department/annexure ownership
+- mandatory or optional requirement
+- department visibility scope
+- checklist owner role
+- workflow stage relevance
+- priority/order
+- active/inactive mapping state
+- soft deletion
+
+Mapped annexures drive checklist generation and visibility. Removing a mapping deactivates the relationship without deleting the global annexure master or historical workflow evidence.
+
+## Workflow Routing System
+
+Workflow responsibility rows define how a department participates in:
+
+- PSSR creation support
+- checklist execution
+- evidence upload
+- punch-point routing
+- due-date ownership
+- escalation
+- pending area-owner approval
+- completion authority
+
+The current baseline stages are seeded per department and can be configured by admins. Future PSSR creation and workflow services should call the department payload or service methods as the source of truth before assigning checklists, approvals, or escalation owners.
+
+## Operational Unit Relationships
+
+Operational units are workflow-aware. Department mappings define:
+
+- unit visibility
+- workflow scope
+- unit-level area owner
+- active/inactive mapping state
+- soft deletion metadata
+
+Operational visibility affects PSSR creation and user filtering. Team members can be assigned to operational units through their user profile plant location, and unit mappings control which units a department participates in.
+
+## Area Owner Architecture
+
+Area owners review completed PSSR records, punch points, pending approvals, and approved/completed flows.
+
+Department area-owner mappings define:
+
+- department-wide or unit-specific approval scope
+- primary area owner user
+- escalation user
+- active/inactive state
+- soft deletion metadata
+
+PSSR approval routing should resolve area owners from department and unit mappings before falling back to manually assigned task ownership.
+
+## Audit Logging
+
+Department activity logs track orchestration changes:
+
+- user status and permission changes through personnel management
+- annexure mapped or unmapped
+- initiator access changed
+- workflow responsibilities changed
+- permission policy changed
+- operational units updated
+- area-owner routing changed
+
+Logs are append-only and exposed in the Activity History tab.
+
+## Soft Delete Behavior
+
+The system avoids hard deletion for compliance-sensitive records.
+
+Soft-deleted objects include:
+
+- users
+- departments
+- department/unit mappings
+- department/annexure mappings
+- workflow responsibilities
+- permission configs
+- area-owner mappings
+- annexure masters
+
+Soft delete uses active flags plus `deleted_at` and `deleted_by_user_id` where applicable. Historical PSSR records, approvals, and audit evidence remain queryable.
+
+## Global Impact
+
+Department configuration is consumed across the portal:
+
+- PSSR creation uses active departments, operational units, initiator capability, annexure visibility, checklist ownership, and area-owner routing.
+- Checklist generation uses active department annexure mappings, priority, mandatory/optional flags, and workflow stage relevance.
+- Assigned users come from department personnel and operational-unit alignment.
+- Visibility rules use department permission configs and user capabilities.
+- Workflow routing uses workflow responsibilities and area-owner mappings.
+- Approval routing uses unit and department area-owner configuration.
+- Dashboard statistics use PSSR tasks, pending approvals, punch points, and department workload.
+
+## Admin APIs
+
+Department routes:
+
+- `GET /api/v1/admin/departments`
+- `POST /api/v1/admin/departments`
+- `PATCH /api/v1/admin/departments/{department_id}`
+- `DELETE /api/v1/admin/departments/{department_id}`
+- `GET /api/v1/admin/departments/{department_id}/users`
+- `PATCH /api/v1/admin/departments/{department_id}/annexures`
+- `DELETE /api/v1/admin/departments/{department_id}/annexures/{mapping_id}`
+- `PATCH /api/v1/admin/departments/{department_id}/units`
+- `PATCH /api/v1/admin/departments/{department_id}/workflow-responsibilities`
+- `PATCH /api/v1/admin/departments/{department_id}/permissions`
+- `PATCH /api/v1/admin/departments/{department_id}/area-owners`
+
+User and initiator routes:
+
+- `PATCH /api/v1/admin/users/{user_id}`
+- `PATCH /api/v1/admin/users/{user_id}/status`
+- `PATCH /api/v1/admin/users/{user_id}/permissions`
+- `DELETE /api/v1/admin/users/{user_id}`
+- `GET /api/v1/pssr/initiators`
+- `GET /api/v1/pssr/initiators/statistics`
+- `PATCH /api/v1/pssr/initiators/{user_id}/enable`
+- `PATCH /api/v1/pssr/initiators/{user_id}/disable`
+- `GET /api/v1/pssr/creation-context`
+
+## Development
+
+Frontend:
+
+```bash
+cd Frontend
+npm install
+npm run dev
+npm run lint
+npm run build
+```
+
+Backend:
+
+```bash
+cd backend
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+```
+
+Seed data:
+
+```bash
+cd backend
+python3 -m app.scripts.seed_users
+python3 -m app.scripts.seed_annexures
+```
+
+Default seeded admin:
+
+```text
+Email: admin@nayara.com
+Password: Admin@12345
+```
+
+## Database Bootstrap
+
+The project currently uses SQLAlchemy `create_all` plus idempotent bootstrap helpers.
+
+Startup performs:
+
+- database connectivity check
+- table creation for registered models
+- index verification
+- department and unit seed verification
+- default workflow responsibility and permission matrix seeding
+
+Production deployments should move schema changes into Alembic or the corporate migration pipeline.
+>>>>>>> 9b293bf (Refactor enterprise department workflows and improve PSSR admin UX)

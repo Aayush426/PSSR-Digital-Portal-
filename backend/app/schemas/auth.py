@@ -10,7 +10,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.models.user import AssignmentStatus, Department, UserRole
+from app.models.user import Department, UserRole
 
 
 class LoginRequest(BaseModel):
@@ -65,7 +65,9 @@ class UserFilterParams(BaseModel):
 class UserUpdateRequest(BaseModel):
     """Fields an ADMIN can update without replacing the user record."""
 
+    employee_id: Optional[str] = Field(None, min_length=2, max_length=100)
     full_name: Optional[str] = Field(None, min_length=2, max_length=255)
+    email: Optional[str] = Field(None, min_length=3, max_length=255)
     role: Optional[UserRole] = None
     department: Optional[str] = Field(None, max_length=100)
     designation: Optional[str] = Field(None, max_length=100)
@@ -73,40 +75,14 @@ class UserUpdateRequest(BaseModel):
     active: Optional[bool] = None
 
 
-class AssignInitiatorRequest(BaseModel):
-    """Payload for assigning a TEAM_MEMBER as a temporary PSSR initiator."""
+class UserStatusUpdateRequest(BaseModel):
+    """Admin payload for explicitly enabling or disabling a user."""
 
-    user_id: int
-    project_reference: Optional[str] = Field(None, max_length=100)
+    active: bool
     reason: Optional[str] = Field(None, max_length=1000)
 
 
-class RevokeInitiatorRequest(BaseModel):
-    """Payload for revoking an active initiator assignment."""
+class UserPermissionResetRequest(BaseModel):
+    """Admin payload for revoking all active capability grants."""
 
-    assignment_id: int
     reason: Optional[str] = Field(None, max_length=1000)
-
-
-class InitiatorAssignmentResponse(BaseModel):
-    """Assignment projection safe for API responses."""
-
-    id: int
-    user_id: int
-    user_employee_id: str
-    user_full_name: str
-    project_reference: Optional[str]
-    status: str
-    reason: Optional[str]
-    assigned_at: datetime
-    revoked_at: Optional[datetime]
-
-
-class AssignmentFilterParams(BaseModel):
-    """Validated filters for assignment listings."""
-
-    status_filter: Optional[AssignmentStatus] = None
-    user_id: Optional[int] = None
-    project_reference: Optional[str] = None
-    page: int = 1
-    per_page: int = 20

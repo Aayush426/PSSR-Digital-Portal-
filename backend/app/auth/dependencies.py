@@ -13,8 +13,9 @@ from sqlalchemy.orm import Session
 from app.auth.jwt_handler import decode_access_token
 from app.core.exceptions import AuthenticationError, AuthorizationError
 from app.database.session import get_db
-from app.models.assignment import PSSRInitiatorAssignment
-from app.models.user import AssignmentStatus, User, UserRole
+from app.models.permissions import PermissionCode
+from app.models.user import User, UserRole
+from app.repositories.permission_repository import UserPermissionRepository
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -77,11 +78,11 @@ def require_pssr_initiator(
     db: Session = Depends(get_db),
 ) -> User:
     """
-    Allow ADMIN users or TEAM_MEMBER users with an active initiator assignment.
+    Allow ADMIN users or TEAM_MEMBER users with active INITIATE_PSSR capability.
 
     PSSR_INITIATOR is intentionally not a permanent role. This dependency checks
-    dynamic assignment state, which scales to project, shutdown, or unit-level
-    initiator authority without changing the identity model.
+    a user-centric capability grant so users create new workflows instead of
+    being mapped to pre-existing PSSR records.
     """
 
     role = _role_value(current_user)
@@ -89,18 +90,14 @@ def require_pssr_initiator(
         return current_user
 
     if role != UserRole.TEAM_MEMBER.value:
-        raise AuthorizationError("PSSR initiator access requires TEAM_MEMBER assignment.")
+        raise AuthorizationError("PSSR initiator access requires TEAM_MEMBER role.")
 
-    has_active_assignment = (
-        db.query(PSSRInitiatorAssignment)
-        .filter(
-            PSSRInitiatorAssignment.user_id == current_user.id,
-            PSSRInitiatorAssignment.status == AssignmentStatus.ACTIVE.value,
-        )
-        .first()
-        is not None
+    has_initiator_capability = UserPermissionRepository.has_permission(
+        db,
+        current_user.id,
+        PermissionCode.INITIATE_PSSR,
     )
 
-    if not has_active_assignment:
-        raise AuthorizationError("Active PSSR initiator assignment required.")
+    if not has_initiator_capability:
+        raise AuthorizationError("INITIATE_PSSR capability required.")
     return current_user

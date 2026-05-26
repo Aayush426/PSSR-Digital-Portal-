@@ -66,7 +66,17 @@ class Settings:
             (
                 "http://localhost:3000,"
                 "http://127.0.0.1:3000,"
+<<<<<<< HEAD
                 "http://10.251.175.178:3000"
+=======
+                "http://localhost:3001,"
+                "http://127.0.0.1:3001,"
+                "http://localhost:3002,"
+                "http://127.0.0.1:3002,"
+                "http://localhost:5173,"
+                "http://127.0.0.1:5173,"
+                "http://10.57.6.178:3000"
+>>>>>>> 9b293bf (Refactor enterprise department workflows and improve PSSR admin UX)
             ),
         ).split(",")
         if origin.strip()

@@ -13,21 +13,20 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, currentPath,
     <div className="flex h-screen bg-surface overflow-hidden">
       <Sidebar currentPath={currentPath} onNavigate={onNavigate} />
       
-      <div className="flex-1 flex flex-col ml-[240px]">
+      <div className="flex-1 flex flex-col ml-60">
         <Header />
+<<<<<<< HEAD
         <main className="flex-1 overflow-y-auto p-8 custom-scrollbar relative">
           <div className="max-w-7xl mx-auto">
+=======
+        <main className="flex-1 overflow-y-auto px-6 py-6 lg:px-8 relative">
+          {/* Single unified max-width constraint at app level */}
+          <div className="w-full mx-auto" style={{ maxWidth: 'var(--container-operational)' }}>
+>>>>>>> 9b293bf (Refactor enterprise department workflows and improve PSSR admin UX)
             {children}
           </div>
         </main>
       </div>
-
-      <style>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; h: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #c0c7d4; border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #717783; }
-      `}</style>
     </div>
   );
 };

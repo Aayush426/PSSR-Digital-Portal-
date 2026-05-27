@@ -5,7 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
-from app.auth.dependencies import require_admin, require_pssr_initiator
+from app.auth.dependencies import get_current_user, require_admin, require_pssr_initiator
 from app.core.responses import paginated_response, success_response
 from app.database.session import get_db
 from app.models.user import User
@@ -107,10 +107,11 @@ def list_pssr_records(
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    current_user: User = Depends(get_current_user),
 ):
     records, total = PSSRTaskRepository.list_records(
         db,
+        current_user=current_user,
         search=search,
         department=department,
         page=page,
@@ -141,7 +142,7 @@ def list_pssr_records(
 def pssr_creation_context(
     search: Optional[str] = Query(None, max_length=100),
     db: Session = Depends(get_db),
-    _: User = Depends(require_pssr_initiator),
+    current_user: User = Depends(require_pssr_initiator),
 ):
     """
     Return active department orchestration data for new PSSR workflows.
@@ -150,13 +151,25 @@ def pssr_creation_context(
     visibility, checklist ownership, operational units, and approval routing.
     """
 
+    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    departments = DepartmentService.list_departments(db, search=search, active=True, page=1, limit=100)
+    if role != "ADMIN":
+        records = [
+            department
+            for department in departments.get("records", [])
+            if department.get("name") == current_user.department or department.get("code") == current_user.department
+        ]
+        departments = {
+            **departments,
+            "records": records,
+            "pagination": {
+                **departments.get("pagination", {}),
+                "total_records": len(records),
+                "total_pages": 1 if records else 0,
+            },
+        }
+
     return success_response(
-        data=DepartmentService.list_departments(
-            db,
-            search=search,
-            active=True,
-            page=1,
-            limit=100,
-        ),
+        data=departments,
         message="PSSR creation context fetched successfully.",
     )

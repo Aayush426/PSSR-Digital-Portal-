@@ -4,8 +4,10 @@ import { motion } from 'motion/react';
 
 import { PageTitle } from '../../components/shared/UIItems';
 import { ActivityFeedSkeleton, DashboardCardSkeleton } from '../../components/shared/Skeleton';
+import { useAuth } from '../../contexts/AuthContext';
 import { useTeamMemberDashboard } from '../../hooks/useTeamMemberDashboard';
 import type { TeamDashboardTask } from '../../types/team-dashboard.types';
+import { canInitiatePSSR } from '../../utils/rbac';
 
 type TeamDashboardTab = 'todo' | 'inprogress' | 'completed';
 
@@ -13,13 +15,14 @@ const emptyTasks: TeamDashboardTask[] = [];
 
 export const TeamMemberDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TeamDashboardTab>('todo');
+  const { user } = useAuth();
   const { data, isLoading, error } = useTeamMemberDashboard();
 
   const todo = data?.todo ?? emptyTasks;
   const inProgress = data?.in_progress ?? emptyTasks;
   const completed = data?.completed ?? emptyTasks;
   const activity = data?.activity ?? [];
-  const isInitiator = data?.is_pssr_initiator ?? false;
+  const isInitiator = canInitiatePSSR(user);
 
   const stats = useMemo(() => {
     const dashboardStats = data?.stats;
@@ -69,7 +72,7 @@ export const TeamMemberDashboard: React.FC = () => {
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
         <PageTitle
           title={isInitiator ? 'PSSR Initiator Dashboard' : 'My Work Dashboard'}
-          subtitle={isInitiator ? 'Create and own PSSR workflows, assign departments, and track approval readiness.' : 'Manage assigned PSSR tasks and track completion status.'}
+          subtitle={isInitiator ? 'Create new PSSR workflows and track records you own, are assigned to, or that involve your department.' : 'Manage assigned PSSR tasks and track completion status.'}
           breadcrumbs={['My Work', 'Dashboard']}
         />
         {isInitiator && (
@@ -85,7 +88,7 @@ export const TeamMemberDashboard: React.FC = () => {
           <div className="px-5 py-4 border-b border-outline-variant flex items-center justify-between">
             <div>
               <h2 className="text-headline-sm font-bold text-on-surface">Initiator Workflow</h2>
-              <p className="text-body-sm text-on-surface-variant">Your capability is user-based. Create new PSSR records and manage owned workflow execution.</p>
+              <p className="text-body-sm text-on-surface-variant">Your capability is user-based. It permits new PSSR creation without changing your TEAM_MEMBER role.</p>
             </div>
             <ClipboardList className="w-5 h-5 text-primary" />
           </div>
@@ -107,7 +110,7 @@ export const TeamMemberDashboard: React.FC = () => {
           <div className="p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
               <h3 className="text-label-md font-black uppercase">Workflow Ownership</h3>
-              <p className="text-body-sm text-on-surface-variant mt-1">New PSSR creation will collect metadata, refinery unit, departments, assigned members, annexures, timelines, and due dates.</p>
+              <p className="text-body-sm text-on-surface-variant mt-1">Dashboard data remains scoped to created records, assigned work, and department involvement.</p>
             </div>
             <button className="inline-flex items-center justify-center gap-2 bg-primary text-on-primary px-4 py-2 rounded text-label-md font-bold shadow-sm">
               <PlusCircle className="w-4 h-4" />
@@ -217,6 +220,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, tab, index }) => (
         <p className="text-body-sm text-on-surface-variant mt-1">{task.pssr_title}</p>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2 text-[11px] text-on-surface-variant">
           <span>Unit: <span className="font-bold text-on-surface">{task.unit}</span></span>
+          {task.department && <span>Department: <span className="font-bold text-on-surface">{task.department}</span></span>}
           {task.due_date && <span>Due: <span className="font-bold text-error">{task.due_date}</span></span>}
           {task.submitted_date && <span>Submitted: <span>{task.submitted_date}</span></span>}
           {task.priority && <span className={`font-bold px-2 py-0.5 rounded ${priorityClass(task.priority)}`}>{task.priority}</span>}

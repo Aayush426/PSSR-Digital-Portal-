@@ -2,6 +2,7 @@ export interface TeamDashboardTask {
   id: string;
   pssr_title: string;
   unit: string;
+  department?: string | null;
   priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | null;
   due_date?: string | null;
   questions_answered: number;

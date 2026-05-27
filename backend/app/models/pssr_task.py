@@ -19,6 +19,7 @@ class PSSRTask(Base):
     department = Column(String(120), nullable=False, index=True)
     priority = Column(String(20), nullable=False, index=True)
     status = Column(String(40), nullable=False, index=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     assigned_to_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     area_owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     due_date = Column(DateTime, nullable=True, index=True)
@@ -32,6 +33,7 @@ class PSSRTask(Base):
 
     __table_args__ = (
         Index("ix_pssr_tasks_assignee_status_due", "assigned_to_user_id", "status", "due_date"),
+        Index("ix_pssr_tasks_creator_status_updated", "created_by_user_id", "status", "updated_at"),
         Index("ix_pssr_tasks_area_status_updated", "area_owner_user_id", "status", "updated_at"),
         Index("ix_pssr_tasks_department_status", "department", "status"),
     )

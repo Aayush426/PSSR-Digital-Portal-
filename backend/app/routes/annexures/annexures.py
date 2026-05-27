@@ -9,13 +9,39 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user, require_admin, require_team_member_or_admin
+from app.core.exceptions import AuthorizationError
 from app.core.responses import success_response
 from app.database.session import get_db
+from app.models.annexures import AnnexureDepartment
 from app.models.user import User
+from app.repositories.pssr_repository import PSSRTaskRepository
 from app.schemas.annexures import AnnexureAssignmentIn, AnnexureCreateIn, AnnexureResponseIn, AnnexureUpdateIn
 from app.services.annexures import AnnexureService
 
 router = APIRouter(prefix="/annexures", tags=["Annexures"])
+
+
+def _role_value(user: User) -> str:
+    return user.role.value if hasattr(user.role, "value") else str(user.role)
+
+
+def _require_annexure_department_scope(db: Session, current_user: User, annexure_id: int) -> None:
+    """Prevent non-admin users from opening annexures outside their department scope."""
+
+    if _role_value(current_user) == "ADMIN":
+        return
+    if not current_user.department:
+        raise AuthorizationError("Annexure access requires department assignment.")
+    allowed = (
+        db.query(AnnexureDepartment.id)
+        .filter(
+            AnnexureDepartment.annexure_id == annexure_id,
+            AnnexureDepartment.department_id == current_user.department,
+        )
+        .first()
+    )
+    if not allowed:
+        raise AuthorizationError("Annexure access is outside your department scope.")
 
 
 @router.get("", summary="List annexure masters")
@@ -37,13 +63,25 @@ def list_annexures(
 ):
     """Return paginated annexure master data with progress for a PSSR instance."""
 
+    if pssr_id and not PSSRTaskRepository.can_view_pssr(db, current_user, pssr_id):
+        raise AuthorizationError("Workflow access is outside your assigned scope.")
+    role = _role_value(current_user)
+    scoped_department = department
+    if role != "ADMIN" and not scoped_department:
+        scoped_department = current_user.department
+    if role != "ADMIN" and not scoped_department:
+        return success_response(
+            data={"records": [], "pagination": {"page": page, "limit": limit, "total_records": 0, "total_pages": 0}},
+            message="Annexures fetched successfully.",
+        )
+
     return success_response(
         data=AnnexureService.list_annexures(
             db,
             page=page,
             limit=limit,
             search=search,
-            department=department,
+            department=scoped_department,
             active=active,
             archived=archived,
             revision=revision,
@@ -150,6 +188,10 @@ def get_annexure(
 ):
     """Return one annexure with sections, questions, templates, and responses."""
 
+    if pssr_id and not PSSRTaskRepository.can_view_pssr(db, current_user, pssr_id):
+        raise AuthorizationError("Workflow access is outside your assigned scope.")
+    _require_annexure_department_scope(db, current_user, annexure_id)
+
     return success_response(
         data=AnnexureService.get_annexure(db, annexure_id, pssr_id),
         message="Annexure fetched successfully.",
@@ -164,6 +206,10 @@ def get_questions(
     current_user: User = Depends(get_current_user),
 ):
     """Return dynamic checklist sections/questions for backend-driven forms."""
+
+    if pssr_id and not PSSRTaskRepository.can_view_pssr(db, current_user, pssr_id):
+        raise AuthorizationError("Workflow access is outside your assigned scope.")
+    _require_annexure_department_scope(db, current_user, annexure_id)
 
     return success_response(
         data=AnnexureService.get_questions(db, annexure_id, pssr_id),
@@ -229,6 +275,7 @@ def download_template(
 ):
     """Download the active Word template for an annexure master."""
 
+    _require_annexure_department_scope(db, current_user, annexure_id)
     template = AnnexureService.active_template(db, annexure_id)
     path = Path(template.file_path)
     if not path.exists():

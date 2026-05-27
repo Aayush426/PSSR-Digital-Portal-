@@ -73,6 +73,13 @@ class UserService:
         """
 
         role = user.role.value if hasattr(user.role, "value") else str(user.role)
+        active_capabilities = [
+            row.permission
+            for row in db.query(UserPermission.permission)
+            .filter(UserPermission.user_id == user.id, UserPermission.active.is_(True))
+            .all()
+        ] if check_initiator else []
+        initiator_enabled = PermissionCode.INITIATE_PSSR.value in active_capabilities
         return UserProfileResponse(
             id=user.id,
             employee_id=user.employee_id,
@@ -84,9 +91,9 @@ class UserService:
             plant_location=user.plant_location,
             active=user.active,
             dashboard_path=dashboard_path_for_role(role),
-            is_pssr_initiator=(
-                UserService.is_pssr_initiator(db, user) if check_initiator else False
-            ),
+            is_pssr_initiator=initiator_enabled,
+            initiator_enabled=initiator_enabled,
+            capabilities=active_capabilities,
             last_login_at=user.last_login_at,
         )
 

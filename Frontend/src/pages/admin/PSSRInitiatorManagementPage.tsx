@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, BadgeCheck, CheckCircle2, ChevronLeft, ChevronRight, Eye, History, KeyRound, MoreVertical, Search } from 'lucide-react';
+import { AlertTriangle, BadgeCheck, CheckCircle2, ChevronLeft, ChevronRight, Eye, History, MoreVertical, Search, ShieldOff } from 'lucide-react';
 
 import { PageTitle } from '../../components/shared/UIItems';
 import { useAdminUsers } from '../../hooks/useAdminUsers';
@@ -60,7 +60,7 @@ export const PSSRInitiatorManagementPage: React.FC = () => {
     <div className="mx-auto max-w-[1500px] space-y-4 animate-in fade-in duration-500">
       <PageTitle
         title="PSSR Initiator Access"
-        subtitle="Grant TEAM_MEMBER users the capability to create and own new PSSR workflows."
+        subtitle="Grant TEAM_MEMBER users the capability to create new PSSR workflows without changing their permanent role."
         breadcrumbs={['Admin Center', 'Access Governance', 'PSSR Initiators']}
       />
 
@@ -220,30 +220,37 @@ const PersonnelAccessRow: React.FC<{
         <p className="truncate text-body-sm text-on-surface-variant">{user.designation || 'Team Member'}</p>
       </div>
       <div className="flex items-center justify-start gap-2 lg:justify-end">
-        <button
-          disabled={busy || !canToggle}
-          onClick={onToggleAccess}
-          className={`h-8 rounded border px-2.5 text-label-sm font-black uppercase disabled:opacity-40 ${enabled ? 'border-primary/20 bg-primary/10 text-primary' : 'border-outline-variant bg-surface text-on-surface-variant hover:text-primary'}`}
-        >
-          {enabled ? 'Initiator Enabled' : 'Standard'}
-        </button>
+        <AccessBadge enabled={enabled} />
         <button onClick={onToggleMenu} className="h-8 w-8 rounded border border-outline-variant text-on-surface-variant hover:bg-surface-container inline-flex items-center justify-center" aria-label={`Actions for ${user.full_name}`}>
           <MoreVertical className="h-4 w-4" />
         </button>
       </div>
       {menuOpen && (
         <div className="absolute right-3 top-11 z-30 w-52 rounded border border-outline-variant bg-surface-container-lowest py-1 shadow-xl">
+          <SecondaryMenuItem
+            icon={enabled ? ShieldOff : BadgeCheck}
+            label={enabled ? 'Disable initiator' : 'Enable initiator'}
+            onClick={() => {
+              onToggleAccess();
+              onCloseMenu();
+            }}
+            disabled={busy || !canToggle}
+            tone={enabled ? 'danger' : 'primary'}
+          />
           <SecondaryMenuItem icon={Eye} label="View profile" onClick={onCloseMenu} />
           <SecondaryMenuItem icon={History} label="Audit history" onClick={onCloseMenu} />
-          <SecondaryMenuItem icon={KeyRound} label="Department permissions" onClick={onCloseMenu} />
         </div>
       )}
     </section>
   );
 };
 
-const SecondaryMenuItem: React.FC<{ icon: React.ComponentType<{ className?: string }>; label: string; onClick: () => void }> = ({ icon: Icon, label, onClick }) => (
-  <button onClick={onClick} className="flex w-full items-center gap-2 px-3 py-2 text-left text-label-sm font-bold text-on-surface hover:bg-surface-container-low">
+const SecondaryMenuItem: React.FC<{ icon: React.ComponentType<{ className?: string }>; label: string; onClick: () => void; disabled?: boolean; tone?: 'primary' | 'danger' }> = ({ icon: Icon, label, onClick, disabled, tone }) => (
+  <button
+    onClick={onClick}
+    disabled={disabled}
+    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-label-sm font-bold hover:bg-surface-container-low disabled:cursor-not-allowed disabled:opacity-40 ${tone === 'danger' ? 'text-error' : tone === 'primary' ? 'text-primary' : 'text-on-surface'}`}
+  >
     <Icon className="h-4 w-4" />
     {label}
   </button>

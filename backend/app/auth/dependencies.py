@@ -86,6 +86,26 @@ require_area_owner = require_role(UserRole.AREA_OWNER)
 require_team_member_or_admin = require_role_or_admin(UserRole.TEAM_MEMBER)
 
 
+def require_permission(permission: PermissionCode):
+    """Build a capability dependency for explicit non-role RBAC grants."""
+
+    def dependency(
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> User:
+        if _role_value(current_user) == UserRole.ADMIN.value:
+            return current_user
+
+        if not UserPermissionRepository.has_permission(db, current_user.id, permission):
+            raise AuthorizationError(f"{permission.value} capability required.")
+        return current_user
+
+    return dependency
+
+
+require_create_pssr = require_permission(PermissionCode.INITIATE_PSSR)
+
+
 def require_pssr_initiator(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -94,8 +114,8 @@ def require_pssr_initiator(
     Allow ADMIN users or TEAM_MEMBER users with active INITIATE_PSSR capability.
 
     PSSR_INITIATOR is intentionally not a permanent role. This dependency checks
-    a user-centric capability grant so users create new workflows instead of
-    being mapped to pre-existing PSSR records.
+    only the workflow creation grant. It does not grant department management,
+    annexure management, workflow configuration, or unrestricted visibility.
     """
 
     role = _role_value(current_user)

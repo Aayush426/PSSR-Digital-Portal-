@@ -39,6 +39,8 @@ class UserProfileResponse(BaseModel):
     active: bool
     dashboard_path: str
     is_pssr_initiator: bool = False
+    initiator_enabled: bool = False
+    capabilities: list[str] = Field(default_factory=list)
     last_login_at: Optional[datetime] = None
 
 

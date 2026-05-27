@@ -37,6 +37,7 @@ def ensure_user_directory_indexes() -> None:
 
     ensure_capability_and_department_tables()
     ensure_user_audit_columns()
+    ensure_pssr_workflow_scope_columns()
     ensure_department_orchestration_columns()
 
     statements = [
@@ -58,6 +59,10 @@ def ensure_user_directory_indexes() -> None:
         "CREATE INDEX IF NOT EXISTS ix_department_area_owner_unit_active ON department_area_owner_mappings (department_id, unit_id, active)",
         "CREATE INDEX IF NOT EXISTS ix_department_activity_department_created ON department_activity_logs (department_id, created_at)",
     ]
+    if engine.dialect.name != "sqlite":
+        statements.append(
+            "CREATE INDEX IF NOT EXISTS ix_pssr_tasks_creator_status_updated ON pssr_tasks (created_by_user_id, status, updated_at)"
+        )
 
     with engine.begin() as connection:
         for statement in statements:
@@ -92,6 +97,19 @@ def ensure_user_audit_columns() -> None:
     ]
     if engine.dialect.name == "sqlite":
         return
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
+
+
+def ensure_pssr_workflow_scope_columns() -> None:
+    """Add workflow ownership columns used by scoped PSSR visibility."""
+
+    if engine.dialect.name == "sqlite":
+        return
+    statements = [
+        "ALTER TABLE pssr_tasks ADD COLUMN IF NOT EXISTS created_by_user_id INTEGER",
+    ]
     with engine.begin() as connection:
         for statement in statements:
             connection.execute(text(statement))

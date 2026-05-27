@@ -8,6 +8,7 @@ from app.models.pssr_task import PSSRTask
 from app.models.user import User, UserRole
 from app.models.permissions import PermissionCode
 from app.repositories.permission_repository import UserPermissionRepository
+from app.repositories.pssr_repository import PSSRTaskRepository
 from app.schemas.team import (
     TeamDashboardActivity,
     TeamDashboardResponse,
@@ -38,7 +39,7 @@ class TeamService:
         activity_query = db.query(PSSRActivityLog)
 
         if role != UserRole.ADMIN.value:
-            task_query = task_query.filter(PSSRTask.assigned_to_user_id == current_user.id)
+            task_query = PSSRTaskRepository.apply_visibility_scope(task_query, current_user)
             activity_query = activity_query.filter(PSSRActivityLog.user_id == current_user.id)
 
         todo = [
@@ -100,6 +101,7 @@ class TeamService:
             id=task.pssr_id,
             pssr_title=task.pssr_title,
             unit=task.unit,
+            department=task.department,
             priority=task.priority,
             due_date=task.due_date.date().isoformat() if task.due_date else None,
             questions_answered=task.questions_answered,

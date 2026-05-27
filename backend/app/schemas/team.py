@@ -11,6 +11,7 @@ class TeamDashboardTask(BaseModel):
     id: str
     pssr_title: str
     unit: str
+    department: Optional[str] = None
     priority: Optional[Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"]] = None
     due_date: Optional[str] = None
     questions_answered: int = 0

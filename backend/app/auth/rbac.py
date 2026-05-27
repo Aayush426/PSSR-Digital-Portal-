@@ -9,6 +9,8 @@ approval authority, or SAP work-order visibility.
 from app.auth.dependencies import (
     require_admin,
     require_area_owner,
+    require_create_pssr,
+    require_permission,
     require_pssr_initiator,
     require_team_member,
 )
@@ -16,6 +18,8 @@ from app.auth.dependencies import (
 __all__ = [
     "require_admin",
     "require_area_owner",
+    "require_create_pssr",
+    "require_permission",
     "require_pssr_initiator",
     "require_team_member",
 ]

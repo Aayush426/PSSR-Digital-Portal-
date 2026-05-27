@@ -9,6 +9,7 @@
 import { tokenStore } from '../utils/token';
 
 export type Role = 'ADMIN' | 'TEAM_MEMBER' | 'AREA_OWNER';
+export type Capability = 'INITIATE_PSSR' | string;
 
 export interface AuthUser {
   id: number;
@@ -21,6 +22,8 @@ export interface AuthUser {
   plant_location?: string | null;
   dashboard_path: string;
   is_pssr_initiator: boolean;
+  initiator_enabled?: boolean;
+  capabilities?: Capability[];
   active?: boolean;
   last_login_at?: string | null;
 }
@@ -37,6 +40,8 @@ export interface AdminUser {
   active: boolean;
   dashboard_path: string;
   is_pssr_initiator: boolean;
+  initiator_enabled?: boolean;
+  capabilities?: Capability[];
   last_login_at?: string | null;
 }
 

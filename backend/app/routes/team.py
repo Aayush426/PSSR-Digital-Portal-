@@ -5,14 +5,17 @@ TEAM_MEMBER users execute assigned PSSR work. Initiator access is checked
 dynamically through user permissions instead of a permanent PSSR_INITIATOR role.
 """
 
-from fastapi import APIRouter, Depends
+from typing import Optional
+
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import require_pssr_initiator, require_team_member_or_admin
 from app.core.responses import success_response
 from app.database.session import get_db
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.services.team_service import TeamService
+from app.services.user_service import UserService
 
 router = APIRouter(prefix="/team", tags=["Team Member"])
 
@@ -27,6 +30,32 @@ def team_dashboard(
     return success_response(
         data=TeamService.get_dashboard(db, current_user).model_dump(mode="json"),
         message="Welcome to Team Member Dashboard",
+    )
+
+
+@router.get("/users/directory", summary="Search active team member directory")
+def team_member_directory(
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=100),
+    department: Optional[str] = Query(None, max_length=100),
+    search: Optional[str] = Query(None, max_length=100),
+    _: User = Depends(require_team_member_or_admin),
+    db: Session = Depends(get_db),
+):
+    """Return searchable active TEAM_MEMBER users for PSSR assignment UI."""
+
+    result = UserService.list_users_paginated(
+        db=db,
+        page=page,
+        limit=limit,
+        role=UserRole.TEAM_MEMBER,
+        department=department,
+        active=True,
+        search=search,
+    )
+    return success_response(
+        data=result,
+        message="Team member directory fetched successfully.",
     )
 
 

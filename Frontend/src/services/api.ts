@@ -326,6 +326,15 @@ export const api = {
     return apiRequest<PaginatedUsersResponse>(`/admin/users${suffix}`);
   },
 
+  listTeamDirectory(params: { page?: number; limit?: number; search?: string; department?: string } = {}): Promise<PaginatedUsersResponse> {
+    const query = new URLSearchParams();
+    query.set('page', String(params.page ?? 1));
+    query.set('limit', String(params.limit ?? 50));
+    if (params.search) query.set('search', params.search);
+    if (params.department) query.set('department', params.department);
+    return apiRequest<PaginatedUsersResponse>(`/team/users/directory?${query.toString()}`);
+  },
+
   listPSSRRecords(params: { page?: number; limit?: number; search?: string; department?: string } = {}): Promise<PSSRRecordsResponse> {
     const query = new URLSearchParams();
     query.set('page', String(params.page ?? 1));

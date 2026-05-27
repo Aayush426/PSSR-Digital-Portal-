@@ -156,6 +156,16 @@ Initiator is not a PSSR assignment and is not a permanent role. Admins enable or
 
 Once enabled, the user can create new PSSR workflows. The creation flow must use department configuration to determine available departments, operational units, visible annexures, default checklist ownership, candidate team members, and area-owner routing.
 
+Current frontend implementation:
+
+- The PSSR Initiator Dashboard opens a `Create New PSSR` form from the `Create New PSSR` button.
+- The form captures plant/unit, date, time, equipment/system, and MOC or Non-MOC PSSR selection.
+- MOC PSSR displays an MOC number and description field; Non-MOC PSSR hides that field.
+- PSSR team leader and team member selection uses the seeded user directory and supports search by employee name, email, or employee ID.
+- Selected leader and team member employee code, designation, and department are auto-filled from directory data.
+- The optional questionnaire section allows annexure selection and maps the `Checked by` column from selected PSSR team members.
+- The team member directory is exposed through a TEAM_MEMBER-accessible read-only route so PSSR initiators do not require admin access for assignment search.
+
 ## Annexure Mapping System
 
 Annexures are globally managed in the Annexure module. Department-specific behavior is configured in `department_annexure_mappings`.
@@ -284,6 +294,10 @@ User and initiator routes:
 - `PATCH /api/v1/pssr/initiators/{user_id}/enable`
 - `PATCH /api/v1/pssr/initiators/{user_id}/disable`
 - `GET /api/v1/pssr/creation-context`
+
+Team member routes:
+
+- `GET /api/v1/team/users/directory`
 
 ## Development
 

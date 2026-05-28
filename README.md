@@ -352,10 +352,7 @@ python3 -m app.scripts.seed_annexures
 
 Default seeded admin:
 
-```text
-Email: admin@nayara.com
-Password: Admin@12345
-```
+Refer env of the codebase 
 
 ## Database Bootstrap
 

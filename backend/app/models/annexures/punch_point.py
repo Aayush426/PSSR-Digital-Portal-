@@ -14,7 +14,7 @@ class AnnexurePunchPoint(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     pssr_id = Column(String(64), nullable=False, index=True)
-    annexure_id = Column(Integer, ForeignKey("annexures.id", ondelete="CASCADE"), nullable=False, index=True)
+    annexure_id = Column(Integer, ForeignKey("annexures.id", ondelete="SET NULL"), nullable=True, index=True)
     question_id = Column(Integer, ForeignKey("annexure_questions.id", ondelete="SET NULL"), nullable=True, index=True)
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=False)

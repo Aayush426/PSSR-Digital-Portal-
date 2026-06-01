@@ -1,4 +1,4 @@
-import { apiRequest } from './api';
+import { apiRequest, getApiBaseUrl } from './api';
 import type {
   AnnexureDetail,
   AnnexureListResponse,
@@ -24,8 +24,7 @@ export interface ListAnnexuresParams {
   pssrId?: string;
 }
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
+const API_BASE_URL = getApiBaseUrl();
 
 export const annexureService = {
   list(params: ListAnnexuresParams = {}): Promise<AnnexureListResponse> {

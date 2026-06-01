@@ -19,11 +19,13 @@ QuestionType = Literal[
     "FILE_UPLOAD",
     "CUSTOM",
 ]
+CheckpointType = Literal["DOCUMENT", "FIELD"]
 
 
 class AnnexureQuestionOut(BaseModel):
     id: int
     question_text: str
+    question_type: CheckpointType = "FIELD"
     response_type: QuestionType = "PASS_FAIL"
     checked_by_department: str
     department_owner: Optional[str] = None
@@ -42,6 +44,7 @@ class AnnexureQuestionOut(BaseModel):
 class AnnexureQuestionTemplateIn(BaseModel):
     id: Optional[int] = None
     question_text: str = Field(..., min_length=3, max_length=4000)
+    question_type: CheckpointType = "FIELD"
     response_type: QuestionType = "PASS_FAIL"
     department_owner: Optional[str] = Field(None, max_length=120)
     category: str = Field("Document Control", max_length=120)

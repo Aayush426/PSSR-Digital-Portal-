@@ -28,6 +28,7 @@ export interface AnnexureResponse {
 export interface AnnexureQuestion {
   id: number;
   question_text: string;
+  question_type?: 'DOCUMENT' | 'FIELD';
   response_type: AnnexureResponseType;
   checked_by_department: string;
   department_owner?: string | null;
@@ -130,6 +131,7 @@ export interface AnnexureOverview {
 export type AnnexureQuestionTemplatePayload = {
   id?: number;
   question_text: string;
+  question_type?: 'DOCUMENT' | 'FIELD';
   response_type: AnnexureResponseType;
   department_owner?: string;
   category: string;

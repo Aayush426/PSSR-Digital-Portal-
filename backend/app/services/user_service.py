@@ -160,11 +160,16 @@ class UserService:
                 query = query.filter(User.role == role.value)
             if department:
                 if isinstance(department, list):
-                    dept_values = [item.value if hasattr(item, "value") else item for item in department if item]
+                    dept_values = [
+                        value
+                        for item in department
+                        for value in UserService._department_variants(item.value if hasattr(item, "value") else item)
+                        if value
+                    ]
                     query = query.filter(User.department.in_(dept_values))
                 else:
                     dept_value = department.value if hasattr(department, "value") else department
-                    query = query.filter(User.department == dept_value)
+                    query = query.filter(User.department.in_(UserService._department_variants(dept_value)))
             if active is not None:
                 query = query.filter(User.active == active)
             if plant_area:
@@ -184,6 +189,7 @@ class UserService:
                         User.employee_id.ilike(search_value),
                         User.full_name.ilike(search_value),
                         User.email.ilike(search_value),
+                        User.designation.ilike(search_value),
                     )
                 )
             return query
@@ -268,6 +274,24 @@ class UserService:
             UserService.build_user_profile(db, user)
             for user in query.order_by(User.full_name.asc()).all()
         ]
+
+    @staticmethod
+    def _department_variants(department: Optional[str]) -> list[str]:
+        """Return canonical department aliases used by PSSR forms and seed data."""
+
+        if not department:
+            return []
+        value = department.strip()
+        lowered = value.lower()
+        aliases = {
+            "safety / psm": ["Safety", "HSE"],
+            "operations": ["Operations", "PM Operation"],
+            "operation": ["Operations", "PM Operation"],
+            "instrumentation": ["Instrumentation", "Instrumental"],
+            "instrumental": ["Instrumental", "Instrumentation"],
+            "others": ["Others", "IT", "Administration"],
+        }
+        return list(dict.fromkeys([value, *aliases.get(lowered, [])]))
 
     @staticmethod
     def update_user(

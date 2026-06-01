@@ -280,9 +280,6 @@ const MocRecordCard: React.FC<{ item: AreaOwnerMocRecord }> = ({ item }) => (
   <div className="border border-outline-variant p-4 rounded">
     <p className="font-bold">{item.moc_id}</p>
     <p className="text-body-sm text-on-surface-variant mt-1">Due: {item.due_date ?? 'Not scheduled'}</p>
-    <div className="mt-3">
-      <span className="bg-error/10 text-error px-2 py-1 rounded text-[11px] font-bold">{item.priority}</span>
-    </div>
   </div>
 );
 

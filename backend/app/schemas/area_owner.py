@@ -1,6 +1,6 @@
 """Pydantic schemas for AREA_OWNER dashboard APIs."""
 
-from typing import List, Literal, Optional
+from typing import List, Optional
 
 from pydantic import BaseModel
 
@@ -26,7 +26,6 @@ class AreaOwnerMocRecord(BaseModel):
     id: str
     moc_id: str
     due_date: Optional[str] = None
-    priority: Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"] = "MEDIUM"
 
 
 class AreaOwnerDecisionLog(BaseModel):

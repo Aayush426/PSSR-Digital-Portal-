@@ -2,10 +2,13 @@
 
 from typing import Optional
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.models.permissions import PermissionCode, UserPermission
+from app.models.annexures import AnnexurePunchPoint
+from app.models.pssr_workflow import PSSRTeamMemberAssignment, PSSRWorkflow
+from app.services.pssr_workflow_service import APPROVED, COMPLETED_BY_TEAM, IN_PROGRESS, PENDING_APPROVAL, TODO, UNDER_PREPARATION, equivalent_states
 
 
 class UserPermissionRepository:
@@ -61,12 +64,31 @@ class UserPermissionRepository:
             .scalar()
             or 0
         )
+        created = db.query(PSSRWorkflow).filter(PSSRWorkflow.initiator_user_id == user_id)
+        assigned_pssr_ids = db.query(PSSRTeamMemberAssignment.pssr_id).filter(PSSRTeamMemberAssignment.user_id == user_id)
+        my_pssr_filter = or_(
+            PSSRWorkflow.initiator_user_id == user_id,
+            PSSRWorkflow.team_leader_user_id == user_id,
+            PSSRWorkflow.pssr_id.in_(assigned_pssr_ids),
+        )
+        open_punch_points = (
+            db.query(func.count(AnnexurePunchPoint.id))
+            .filter(
+                AnnexurePunchPoint.pssr_id.in_(db.query(PSSRWorkflow.pssr_id).filter(my_pssr_filter)),
+                AnnexurePunchPoint.status.in_(["OPEN", "IN_PROGRESS"]),
+            )
+            .scalar()
+            or 0
+        )
         return {
             "active_capabilities": active_permissions,
-            "draft_pssr": 0,
-            "in_progress": 0,
-            "pending_area_owner_approval": 0,
-            "approved": 0,
-            "open_punch_points": 0,
-            "my_pssr": 0,
+            "under_preparation": created.filter(PSSRWorkflow.workflow_state.in_(equivalent_states(UNDER_PREPARATION))).count(),
+            "draft_pssr": created.filter(PSSRWorkflow.workflow_state.in_(equivalent_states(UNDER_PREPARATION))).count(),
+            "todo": db.query(PSSRWorkflow).filter(my_pssr_filter, PSSRWorkflow.workflow_state.in_(equivalent_states(TODO))).count(),
+            "in_progress": db.query(PSSRWorkflow).filter(my_pssr_filter, PSSRWorkflow.workflow_state.in_(equivalent_states(IN_PROGRESS))).count(),
+            "completed_by_team": db.query(PSSRWorkflow).filter(my_pssr_filter, PSSRWorkflow.workflow_state.in_(equivalent_states(COMPLETED_BY_TEAM))).count(),
+            "pending_area_owner_approval": db.query(PSSRWorkflow).filter(my_pssr_filter, PSSRWorkflow.workflow_state.in_(equivalent_states(PENDING_APPROVAL))).count(),
+            "approved": db.query(PSSRWorkflow).filter(my_pssr_filter, PSSRWorkflow.workflow_state.in_(equivalent_states(APPROVED))).count(),
+            "open_punch_points": open_punch_points,
+            "my_pssr": db.query(PSSRWorkflow).filter(my_pssr_filter).count(),
         }

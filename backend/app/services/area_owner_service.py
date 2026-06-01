@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.models.pssr import PSSRActivityLog, PSSRMocReview
 from app.models.pssr_task import PSSRTask
+from app.models.pssr_workflow import PSSRWorkflow
 from app.models.user import User
 from app.schemas.area_owner import (
     AreaOwnerApprovedRecord,
@@ -14,6 +15,7 @@ from app.schemas.area_owner import (
     AreaOwnerMocRecord,
     AreaOwnerPendingRecord,
 )
+from app.services.pssr_workflow_service import APPROVED, PENDING_APPROVAL, equivalent_states
 
 
 class AreaOwnerService:
@@ -43,6 +45,16 @@ class AreaOwnerService:
             .limit(25)
             .all()
         )
+        pending_workflows = (
+            db.query(PSSRWorkflow)
+            .filter(
+                PSSRWorkflow.area_owner_user_id == current_user.id,
+                PSSRWorkflow.workflow_state.in_(equivalent_states(PENDING_APPROVAL)),
+            )
+            .order_by(PSSRWorkflow.updated_at.desc())
+            .limit(25)
+            .all()
+        )
         approved_tasks = (
             db.query(PSSRTask)
             .filter(
@@ -50,6 +62,16 @@ class AreaOwnerService:
                 PSSRTask.status == "Completed",
             )
             .order_by(PSSRTask.updated_at.desc())
+            .limit(25)
+            .all()
+        )
+        approved_workflows = (
+            db.query(PSSRWorkflow)
+            .filter(
+                PSSRWorkflow.area_owner_user_id == current_user.id,
+                PSSRWorkflow.workflow_state.in_(equivalent_states(APPROVED)),
+            )
+            .order_by(PSSRWorkflow.updated_at.desc())
             .limit(25)
             .all()
         )
@@ -78,6 +100,16 @@ class AreaOwnerService:
 
         pending_records = [
             AreaOwnerPendingRecord(
+                id=workflow.pssr_id,
+                pssr_id=workflow.pssr_id,
+                submitted_by="PSSR Initiator",
+                unit=workflow.plant_unit,
+                department="Multi Department",
+                submitted_at=workflow.submitted_at.date().isoformat() if workflow.submitted_at else None,
+            )
+            for workflow in pending_workflows
+        ] + [
+            AreaOwnerPendingRecord(
                 id=str(task.id),
                 pssr_id=task.pssr_id,
                 submitted_by=submitters.get(task.assigned_to_user_id, "Assigned Team Member"),
@@ -88,6 +120,15 @@ class AreaOwnerService:
             for task in pending_tasks
         ]
         approved_records = [
+            AreaOwnerApprovedRecord(
+                id=workflow.pssr_id,
+                pssr_id=workflow.pssr_id,
+                approved_by=current_user.full_name,
+                unit=workflow.plant_unit,
+                approved_at=workflow.approved_at.date().isoformat() if workflow.approved_at else None,
+            )
+            for workflow in approved_workflows
+        ] + [
             AreaOwnerApprovedRecord(
                 id=str(task.id),
                 pssr_id=task.pssr_id,
@@ -102,7 +143,6 @@ class AreaOwnerService:
                 id=str(item.id),
                 moc_id=item.moc_id,
                 due_date=item.due_date,
-                priority=item.priority,
             )
             for item in moc_reviews
         ]

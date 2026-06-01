@@ -86,7 +86,6 @@ export interface PSSRRecordOption {
   pssr_title: string;
   unit: string;
   department: string;
-  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   status: string;
   due_date?: string | null;
 }
@@ -115,6 +114,119 @@ export interface InitiatorCapabilitiesResponse {
 export interface PSSRRecordsResponse {
   records: PSSRRecordOption[];
   pagination: UserPagination;
+}
+
+export interface CreatePSSRPayload {
+  plant_unit: string;
+  equipment_system: string;
+  moc_type: 'MOC' | 'NON_MOC';
+  moc_number?: string | null;
+  description?: string | null;
+  workflow_state?: 'UNDER_PREPARATION' | 'TODO';
+  team_leader_user_id?: number | null;
+  area_owner_user_id?: number | null;
+  annexure_ids: number[];
+  selected_questions?: Array<{ annexure_id: number; question_id: number; question_type: 'DOCUMENT' | 'FIELD'; department_owner: string; assigned_user_id?: number | null }>;
+  assignments: Array<{ department: string; user_id: number; due_date?: string | null }>;
+  custom_questions?: Array<{ question_text: string; description: string; question_type: 'DOCUMENT' | 'FIELD'; department_owner: string; assigned_user_id?: number | null; category: string; mandatory: boolean; remarks?: string | null; attachments?: Array<Record<string, unknown>> }>;
+}
+
+export interface PSSRWorkflowDetail {
+  pssr_id: string;
+  title: string;
+  plant_unit: string;
+  equipment_system: string;
+  moc_type: string;
+  moc_number?: string | null;
+  description?: string | null;
+  workflow_state: string;
+  initiator_user_id?: number;
+  team_leader_user_id?: number | null;
+  initiator?: { id: number; employee_id: string; full_name: string; email: string; department?: string | null; designation?: string | null } | null;
+  team_leader?: { id: number; employee_id: string; full_name: string; email: string; department?: string | null; designation?: string | null } | null;
+  started_at?: string | null;
+  submitted_at?: string | null;
+  started_by_user_id?: number | null;
+  completed_at?: string | null;
+  completed_by_user_id?: number | null;
+  approved_at?: string | null;
+  assignment_count: number;
+  question_count: number;
+  questions_answered?: number;
+  mandatory_question_count?: number;
+  mandatory_questions_answered?: number;
+  progress?: number;
+  open_punch_points: number;
+  mandatory_open_punch_points?: number;
+  annexure_count?: number;
+  created_at?: string;
+  updated_at?: string;
+  assignments?: Array<{
+    id: number;
+    pssr_id: string;
+    department: string;
+    user_id: number;
+    status: string;
+    due_date?: string | null;
+    assigned_at: string;
+    started_at?: string | null;
+    completed_at?: string | null;
+    user?: {
+      id: number;
+      employee_id: string;
+      full_name: string;
+      email: string;
+      department?: string | null;
+      designation?: string | null;
+    } | null;
+  }>;
+  questions?: Array<{
+    id: number;
+    pssr_id: string;
+    annexure_id?: number | null;
+    annexure_question_id?: number | null;
+    question_text: string;
+    question_description?: string | null;
+    question_type?: 'DOCUMENT' | 'FIELD';
+    response_type: string;
+    department_owner: string;
+    assigned_user_id?: number | null;
+    assigned_user?: {
+      id: number;
+      employee_id: string;
+      full_name: string;
+      email: string;
+      department?: string | null;
+      designation?: string | null;
+    } | null;
+    category: string;
+    mandatory: boolean;
+    custom: boolean;
+    remarks?: string | null;
+    status: string;
+    sequence: number;
+    can_answer?: boolean;
+    latest_response?: {
+      id: number;
+      response: string;
+      remarks?: string | null;
+      attachments: Array<Record<string, unknown>>;
+      responded_by_user_id?: number | null;
+      responded_at?: string | null;
+    } | null;
+  }>;
+  annexures?: Array<{ id: number; code: string; title: string; revision: string; status: string; selected_at: string }>;
+  punch_points?: Array<{ id: number; title: string; description?: string | null; category: string; severity: string; status: string; owning_department: string; assigned_to_user_id?: number | null; question_id?: number | null; workflow_reference?: string; due_date?: string | null; created_at: string }>;
+  audit_timeline?: Array<{ id: number; action: string; summary: string; actor_user_id?: number | null; actor?: { id: number; employee_id: string; full_name: string; email: string; department?: string | null; designation?: string | null } | null; department?: string | null; metadata: Record<string, unknown>; created_at: string }>;
+  permissions?: {
+    is_admin: boolean;
+    is_initiator: boolean;
+    is_team_leader: boolean;
+    is_assigned_member: boolean;
+    can_submit?: boolean;
+    can_edit_header: boolean;
+    editable_departments: string[];
+  };
 }
 
 export interface DepartmentAnnexure {
@@ -243,8 +355,18 @@ export interface LoginResponse {
   user: AuthUser;
 }
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
+const API_TIMEOUT_MS = 15000;
+
+export function getApiBaseUrl(): string {
+  const configured = import.meta.env.VITE_API_BASE_URL?.trim();
+  if (configured) return configured.replace(/\/$/, '');
+  if (typeof window !== 'undefined' && window.location.hostname) {
+    return `${window.location.protocol}//${window.location.hostname}:8000/api/v1`;
+  }
+  return 'http://127.0.0.1:8000/api/v1';
+}
+
+const API_BASE_URL = getApiBaseUrl();
 
 export async function apiRequest<T>(
   path: string,
@@ -265,12 +387,32 @@ export async function apiRequest<T>(
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers,
-  });
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  options.signal?.addEventListener('abort', () => controller.abort(), { once: true });
 
-  const envelope = (await response.json()) as ApiEnvelope<T>;
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error(`API request timed out after ${API_TIMEOUT_MS / 1000}s: ${API_BASE_URL}${path}`);
+    }
+    throw new Error(`Unable to reach backend API at ${API_BASE_URL}. Check backend server, VITE_API_BASE_URL, and CORS.`);
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+
+  let envelope: ApiEnvelope<T>;
+  try {
+    envelope = (await response.json()) as ApiEnvelope<T>;
+  } catch {
+    throw new Error(`Backend returned a non-JSON response for ${path} with status ${response.status}.`);
+  }
   if (!response.ok || !envelope.success) {
     if (response.status === 401) {
       tokenStore.clear();
@@ -326,12 +468,13 @@ export const api = {
     return apiRequest<PaginatedUsersResponse>(`/admin/users${suffix}`);
   },
 
-  listTeamDirectory(params: { page?: number; limit?: number; search?: string; department?: string } = {}): Promise<PaginatedUsersResponse> {
+  listTeamDirectory(params: { page?: number; limit?: number; search?: string; department?: string; includeAllRoles?: boolean } = {}): Promise<PaginatedUsersResponse> {
     const query = new URLSearchParams();
     query.set('page', String(params.page ?? 1));
     query.set('limit', String(params.limit ?? 50));
     if (params.search) query.set('search', params.search);
     if (params.department) query.set('department', params.department);
+    if (params.includeAllRoles) query.set('include_all_roles', 'true');
     return apiRequest<PaginatedUsersResponse>(`/team/users/directory?${query.toString()}`);
   },
 
@@ -342,6 +485,30 @@ export const api = {
     if (params.search) query.set('search', params.search);
     if (params.department) query.set('department', params.department);
     return apiRequest<PSSRRecordsResponse>(`/pssr/records?${query.toString()}`);
+  },
+
+  createPSSR(payload: CreatePSSRPayload): Promise<PSSRWorkflowDetail> {
+    return apiRequest<PSSRWorkflowDetail>('/pssr', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getPSSR(pssrId: string): Promise<PSSRWorkflowDetail> {
+    return apiRequest<PSSRWorkflowDetail>(`/pssr/${encodeURIComponent(pssrId)}`);
+  },
+
+  submitPSSR(pssrId: string): Promise<PSSRWorkflowDetail> {
+    return apiRequest<PSSRWorkflowDetail>(`/pssr/${encodeURIComponent(pssrId)}/submit`, {
+      method: 'POST',
+    });
+  },
+
+  respondToPSSRQuestion(pssrId: string, questionId: number, payload: { response: 'YES' | 'NO' | 'NA' | 'PENDING'; remarks?: string | null; attachments?: Array<Record<string, unknown>> }): Promise<NonNullable<PSSRWorkflowDetail['questions']>[number]> {
+    return apiRequest<NonNullable<PSSRWorkflowDetail['questions']>[number]>(`/pssr/${encodeURIComponent(pssrId)}/questions/${questionId}/respond`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   },
 
   listInitiators(params: { page?: number; limit?: number; active?: boolean; department?: string; search?: string } = {}): Promise<InitiatorCapabilitiesResponse> {

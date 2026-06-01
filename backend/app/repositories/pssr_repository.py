@@ -6,6 +6,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.models.pssr_task import PSSRTask
+from app.models.pssr_workflow import PSSRTeamMemberAssignment, PSSRWorkflow
 from app.models.user import User, UserRole
 
 
@@ -30,16 +31,13 @@ class PSSRTaskRepository:
         if role == UserRole.ADMIN.value:
             return query
 
-        visibility = []
-        if getattr(PSSRTask, "created_by_user_id", None) is not None:
-            visibility.append(PSSRTask.created_by_user_id == current_user.id)
-        visibility.append(PSSRTask.assigned_to_user_id == current_user.id)
+        visibility = [
+            PSSRTask.assigned_to_user_id == current_user.id,
+            PSSRTask.created_by_user_id == current_user.id,
+        ]
 
         if role == UserRole.AREA_OWNER.value:
             visibility.append(PSSRTask.area_owner_user_id == current_user.id)
-
-        if current_user.department:
-            visibility.append(PSSRTask.department == current_user.department)
 
         return query.filter(or_(*visibility))
 
@@ -50,6 +48,17 @@ class PSSRTaskRepository:
 
     @staticmethod
     def can_view_pssr(db: Session, current_user: User, pssr_id: str) -> bool:
+        role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+        workflow = db.query(PSSRWorkflow).filter(PSSRWorkflow.pssr_id == pssr_id).first()
+        if workflow:
+            if role == UserRole.ADMIN.value:
+                return True
+            if current_user.id in {workflow.initiator_user_id, workflow.team_leader_user_id, workflow.area_owner_user_id}:
+                return True
+            return db.query(PSSRTeamMemberAssignment.id).filter(
+                PSSRTeamMemberAssignment.pssr_id == pssr_id,
+                PSSRTeamMemberAssignment.user_id == current_user.id,
+            ).first() is not None
         query = PSSRTaskRepository.apply_visibility_scope(db.query(PSSRTask.id), current_user)
         return query.filter(PSSRTask.pssr_id == pssr_id).first() is not None
 

@@ -144,6 +144,23 @@ export const AnnexuresPage: React.FC = () => {
         </button>
       </div>
 
+      {(list.error || overview.error) && (
+        <div className="rounded border border-error/30 bg-error/5 p-4">
+          <p className="text-label-md font-black text-error">Unable to load annexure data</p>
+          <p className="mt-1 text-body-sm text-on-surface-variant">{(list.error ?? overview.error)?.message}</p>
+          <button
+            type="button"
+            onClick={() => {
+              void list.refetch();
+              void overview.refetch();
+            }}
+            className="mt-3 rounded border border-outline-variant px-3 py-2 text-label-sm font-black text-primary hover:bg-primary/5"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       <div className="bg-surface-container-lowest border border-outline-variant rounded-lg overflow-hidden shadow-sm">
         <div className="flex flex-wrap border-b border-outline-variant bg-surface-container-low sticky top-0 z-20">
           <TabButton active={activeTab === 'overview'} icon={<Layers3 className="w-4 h-4" />} label="Placeholder 1" onClick={() => setActiveTab('overview')} />

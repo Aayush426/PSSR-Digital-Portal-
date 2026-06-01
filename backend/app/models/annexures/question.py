@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -17,6 +17,7 @@ class AnnexureQuestion(Base):
     annexure_id = Column(Integer, ForeignKey("annexures.id", ondelete="CASCADE"), nullable=False, index=True)
     section_id = Column(Integer, ForeignKey("annexure_sections.id", ondelete="CASCADE"), nullable=False, index=True)
     question_text = Column(Text, nullable=False)
+    question_type = Column(String(20), nullable=False, default="FIELD", index=True)
     response_type = Column(String(40), nullable=False, default="PASS_FAIL", index=True)
     checked_by_department = Column(String(120), nullable=False, index=True)
     department_owner = Column(String(120), nullable=True, index=True)
@@ -39,6 +40,7 @@ class AnnexureQuestion(Base):
 
     __table_args__ = (
         UniqueConstraint("section_id", "sort_order", name="uq_annexure_question_section_sort"),
+        CheckConstraint("question_type IN ('DOCUMENT', 'FIELD')", name="ck_annexure_questions_question_type"),
         Index("ix_annexure_questions_annexure_department", "annexure_id", "checked_by_department"),
         Index("ix_annexure_questions_active_sort", "active", "sort_order"),
     )

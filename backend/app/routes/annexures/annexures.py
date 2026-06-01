@@ -13,10 +13,14 @@ from app.core.exceptions import AuthorizationError
 from app.core.responses import success_response
 from app.database.session import get_db
 from app.models.annexures import AnnexureDepartment
+from app.models.annexures import AnnexureQuestion
+from app.models.permissions import PermissionCode
 from app.models.user import User
 from app.repositories.pssr_repository import PSSRTaskRepository
+from app.repositories.permission_repository import UserPermissionRepository
 from app.schemas.annexures import AnnexureAssignmentIn, AnnexureCreateIn, AnnexureResponseIn, AnnexureUpdateIn
 from app.services.annexures import AnnexureService
+from app.services.pssr_workflow_service import PSSRWorkflowService
 
 router = APIRouter(prefix="/annexures", tags=["Annexures"])
 
@@ -28,7 +32,7 @@ def _role_value(user: User) -> str:
 def _require_annexure_department_scope(db: Session, current_user: User, annexure_id: int) -> None:
     """Prevent non-admin users from opening annexures outside their department scope."""
 
-    if _role_value(current_user) == "ADMIN":
+    if _role_value(current_user) == "ADMIN" or UserPermissionRepository.has_permission(db, current_user.id, PermissionCode.INITIATE_PSSR):
         return
     if not current_user.department:
         raise AuthorizationError("Annexure access requires department assignment.")
@@ -42,6 +46,23 @@ def _require_annexure_department_scope(db: Session, current_user: User, annexure
     )
     if not allowed:
         raise AuthorizationError("Annexure access is outside your department scope.")
+
+
+def _apply_question_scope(payload: dict | list, scope: list[str] | None):
+    if scope is None:
+        return payload
+    sections = payload.get("sections", []) if isinstance(payload, dict) else payload
+    scoped_sections = []
+    for section in sections:
+        questions = [
+            question for question in section.get("questions", [])
+            if (question.get("department_owner") or question.get("checked_by_department")) in scope
+        ]
+        if questions:
+            scoped_sections.append({**section, "questions": questions})
+    if isinstance(payload, dict):
+        return {**payload, "sections": scoped_sections}
+    return scoped_sections
 
 
 @router.get("", summary="List annexure masters")
@@ -65,23 +86,13 @@ def list_annexures(
 
     if pssr_id and not PSSRTaskRepository.can_view_pssr(db, current_user, pssr_id):
         raise AuthorizationError("Workflow access is outside your assigned scope.")
-    role = _role_value(current_user)
-    scoped_department = department
-    if role != "ADMIN" and not scoped_department:
-        scoped_department = current_user.department
-    if role != "ADMIN" and not scoped_department:
-        return success_response(
-            data={"records": [], "pagination": {"page": page, "limit": limit, "total_records": 0, "total_pages": 0}},
-            message="Annexures fetched successfully.",
-        )
-
     return success_response(
         data=AnnexureService.list_annexures(
             db,
             page=page,
             limit=limit,
             search=search,
-            department=scoped_department,
+            department=department,
             active=active,
             archived=archived,
             revision=revision,
@@ -190,10 +201,14 @@ def get_annexure(
 
     if pssr_id and not PSSRTaskRepository.can_view_pssr(db, current_user, pssr_id):
         raise AuthorizationError("Workflow access is outside your assigned scope.")
-    _require_annexure_department_scope(db, current_user, annexure_id)
+    if not pssr_id:
+        _require_annexure_department_scope(db, current_user, annexure_id)
 
+    data = AnnexureService.get_annexure(db, annexure_id, pssr_id)
+    if pssr_id:
+        data = _apply_question_scope(data, PSSRWorkflowService._department_scope(db, pssr_id, current_user))
     return success_response(
-        data=AnnexureService.get_annexure(db, annexure_id, pssr_id),
+        data=data,
         message="Annexure fetched successfully.",
     )
 
@@ -209,10 +224,14 @@ def get_questions(
 
     if pssr_id and not PSSRTaskRepository.can_view_pssr(db, current_user, pssr_id):
         raise AuthorizationError("Workflow access is outside your assigned scope.")
-    _require_annexure_department_scope(db, current_user, annexure_id)
+    if not pssr_id:
+        _require_annexure_department_scope(db, current_user, annexure_id)
 
+    data = AnnexureService.get_questions(db, annexure_id, pssr_id)
+    if pssr_id:
+        data = _apply_question_scope(data, PSSRWorkflowService._department_scope(db, pssr_id, current_user))
     return success_response(
-        data=AnnexureService.get_questions(db, annexure_id, pssr_id),
+        data=data,
         message="Annexure questions fetched successfully.",
     )
 
@@ -225,6 +244,16 @@ def respond(
 ):
     """Create or update a PASS/FAIL/NA/PENDING response with audit metadata."""
 
+    if not PSSRTaskRepository.can_view_pssr(db, current_user, payload.pssr_id):
+        raise AuthorizationError("Workflow access is outside your assigned scope.")
+    question = db.query(AnnexureQuestion).filter(AnnexureQuestion.id == payload.question_id).first()
+    if question:
+        PSSRWorkflowService._ensure_department_access(
+            db,
+            payload.pssr_id,
+            question.department_owner or question.checked_by_department,
+            current_user,
+        )
     return success_response(
         data=AnnexureService.record_response(db, payload, current_user),
         message="Annexure response saved successfully.",

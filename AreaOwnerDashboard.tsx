@@ -198,11 +198,7 @@ export const AreaOwnerDashboard: React.FC = () => {
                     <div className="flex items-center space-x-4 mt-2 text-[11px] text-on-surface-variant">
                       <span>Issued: <span className="text-[10px]">{item.issuedDate}</span></span>
                       <span>Due: <span className="font-bold text-error">{item.dueDate}</span></span>
-                      <span className={`font-bold px-2 py-0.5 rounded ${
-                        item.priority === 'High' ? 'bg-error/10 text-error' : 'bg-tertiary/10 text-tertiary'
-                      }`}>
-                        {item.priority} - {item.punchItems} Items
-                      </span>
+                      <span>Punch items: <span className="font-bold text-on-surface">{item.punchItems}</span></span>
                     </div>
                   </div>
                 </div>

@@ -272,6 +272,7 @@ def ensure_sections_and_questions(db, annexure: Annexure, departments: list[str]
                 )
                 db.add(question)
             question.question_text = question_text
+            question.question_type = "DOCUMENT" if section_type == "DOCUMENT" else "FIELD"
             question.response_type = "PASS_FAIL"
             question.checked_by_department = department
             question.department_owner = department

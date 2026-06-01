@@ -488,6 +488,7 @@ class AnnexureService:
         return {
             "id": question.id,
             "question_text": question.question_text,
+            "question_type": question.question_type or "FIELD",
             "checked_by_department": question.checked_by_department,
             "response_type": question.response_type,
             "department_owner": question.department_owner,
@@ -541,6 +542,7 @@ class AnnexureService:
                 seen_question_ids.add(question.id)
                 sequence = question_payload.sequence or question_index
                 question.question_text = question_payload.question_text
+                question.question_type = question_payload.question_type
                 question.response_type = question_payload.response_type
                 question.checked_by_department = question_payload.department_owner or section_payload.responsible_department or "Shared"
                 question.department_owner = question_payload.department_owner

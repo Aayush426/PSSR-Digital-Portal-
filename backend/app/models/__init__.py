@@ -27,4 +27,13 @@ from app.models.annexures import (
 )
 from app.models.pssr import PSSRActivityLog, PSSRMocReview
 from app.models.pssr_task import PSSRTask
+from app.models.pssr_workflow import (
+    PSSRAnnexureSelection,
+    PSSRAuditLog,
+    PSSRNotification,
+    PSSRQuestion,
+    PSSRQuestionResponse,
+    PSSRTeamMemberAssignment,
+    PSSRWorkflow,
+)
 from app.models.user import AssignmentStatus, Department, User, UserRole

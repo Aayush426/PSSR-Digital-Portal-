@@ -19,7 +19,6 @@ export interface AreaOwnerMocRecord {
   id: string;
   moc_id: string;
   due_date?: string | null;
-  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 }
 
 export interface AreaOwnerDecisionLog {

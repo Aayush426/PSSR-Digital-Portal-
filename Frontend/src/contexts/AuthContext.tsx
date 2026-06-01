@@ -6,16 +6,18 @@
  * which keeps future SSO or refresh-token work localized.
  */
 
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { api, type AuthUser, type Role } from '../services/api';
 import { tokenStore } from '../utils/token';
 
 interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
+  authError: string | null;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<AuthUser>;
   logout: () => Promise<void>;
+  retrySession: () => Promise<void>;
   hasRole: (roles: Role[]) => boolean;
 }
 
@@ -24,6 +26,33 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(() => tokenStore.getUser());
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  const hydrateSession = useCallback(async () => {
+    const token = tokenStore.getToken();
+    if (!token) {
+      setAuthError(null);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const profile = await api.me();
+      const currentToken = tokenStore.getToken();
+      if (currentToken) tokenStore.save(currentToken, profile);
+      setUser(profile);
+      setAuthError(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to validate your session.';
+      if (!tokenStore.getToken()) {
+        setUser(null);
+      }
+      setAuthError(message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     /**
@@ -31,25 +60,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
      * client state from granting access after backend deactivation or role
      * changes.
      */
-    const token = tokenStore.getToken();
-    if (!token) {
-      setLoading(false);
-      return;
-    }
-
-    api
-      .me()
-      .then((profile) => {
-        const currentToken = tokenStore.getToken();
-        if (currentToken) tokenStore.save(currentToken, profile);
-        setUser(profile);
-      })
-      .catch(() => {
-        tokenStore.clear();
-        setUser(null);
-      })
-      .finally(() => setLoading(false));
-  }, []);
+    void hydrateSession();
+  }, [hydrateSession]);
 
   useEffect(() => {
     /**
@@ -72,11 +84,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     () => ({
       user,
       loading,
+      authError,
       isAuthenticated: Boolean(user && tokenStore.getToken()),
       async login(email: string, password: string) {
         const response = await api.login(email, password);
         tokenStore.save(response.access_token, response.user);
         setUser(response.user);
+        setAuthError(null);
         return response.user;
       },
       async logout() {
@@ -92,8 +106,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       hasRole(roles: Role[]) {
         return Boolean(user && roles.includes(user.role));
       },
+      retrySession: hydrateSession,
     }),
-    [loading, user]
+    [authError, hydrateSession, loading, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

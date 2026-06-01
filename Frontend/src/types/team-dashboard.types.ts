@@ -3,7 +3,6 @@ export interface TeamDashboardTask {
   pssr_title: string;
   unit: string;
   department?: string | null;
-  priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | null;
   due_date?: string | null;
   questions_answered: number;
   total_questions: number;
@@ -11,7 +10,10 @@ export interface TeamDashboardTask {
   last_updated?: string | null;
   submitted_date?: string | null;
   reviewer_name?: string | null;
-  status?: 'Not Started' | 'In Progress' | 'Completed' | 'Pending Review' | null;
+  status?: 'Under Preparation' | 'To Do' | 'In Progress' | 'Completed' | null;
+  workflow_state?: string | null;
+  ownership?: 'initiator' | 'team_leader' | 'assigned_member' | 'admin' | 'legacy' | null;
+  can_start?: boolean;
 }
 
 export interface TeamDashboardActivity {
@@ -23,6 +25,8 @@ export interface TeamDashboardActivity {
 }
 
 export interface TeamDashboardStats {
+  draft_count: number;
+  assigned_count: number;
   todo_count: number;
   in_progress_count: number;
   completed_count: number;
@@ -31,8 +35,11 @@ export interface TeamDashboardStats {
 
 export interface InitiatorStats {
   active_capabilities: number;
+  under_preparation?: number;
   draft_pssr: number;
+  todo?: number;
   in_progress: number;
+  completed_by_team?: number;
   pending_area_owner_approval: number;
   approved: number;
   open_punch_points: number;
@@ -40,9 +47,12 @@ export interface InitiatorStats {
 }
 
 export interface TeamDashboardResponse {
+  draft: TeamDashboardTask[];
+  assigned: TeamDashboardTask[];
   todo: TeamDashboardTask[];
   in_progress: TeamDashboardTask[];
   completed: TeamDashboardTask[];
+  pending_review: TeamDashboardTask[];
   activity: TeamDashboardActivity[];
   stats: TeamDashboardStats;
   is_pssr_initiator: boolean;

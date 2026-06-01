@@ -19,7 +19,7 @@ export const RoleLayout: React.FC<RoleLayoutProps> = ({ children, currentPath, o
           { id: 'compliance', name: 'Compliance Gate', icon: ShieldCheck, path: '/area-owner/dashboard' },
         ]
       : [
-          { id: 'assigned', name: 'Assigned PSSR', icon: ClipboardCheck, path: '/team/dashboard' },
+          { id: 'assigned', name: 'Assigned PSSR', icon: ClipboardCheck, path: '/team/assigned' },
           { id: 'compliance', name: 'Compliance Gate', icon: ShieldCheck, path: '/team/dashboard' },
         ]),
   ];
@@ -34,7 +34,7 @@ export const RoleLayout: React.FC<RoleLayoutProps> = ({ children, currentPath, o
 
         <nav className="flex-1 px-2 space-y-0.5 mt-4">
           {visibleNav.map((item) => {
-            const isActive = currentPath === item.path || (item.id === 'dashboard' && currentPath.includes('/dashboard'));
+            const isActive = currentPath === item.path;
             return (
               <button
                 key={item.id}

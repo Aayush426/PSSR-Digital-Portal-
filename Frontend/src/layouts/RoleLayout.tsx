@@ -1,6 +1,7 @@
 import React from 'react';
 import { Bell, ClipboardCheck, FileClock, LayoutDashboard, LogOut, Search, ShieldCheck, User as UserIcon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { canInitiatePSSR } from '../utils/rbac';
 
 interface RoleLayoutProps {
   children: React.ReactNode;
@@ -11,14 +12,16 @@ interface RoleLayoutProps {
 export const RoleLayout: React.FC<RoleLayoutProps> = ({ children, currentPath, onNavigate }) => {
   const { user, logout } = useAuth();
   const dashboardPath = user?.role === 'AREA_OWNER' ? '/area-owner/dashboard' : '/team/dashboard';
+  const isInitiator = canInitiatePSSR(user);
   const visibleNav = [
     { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard, path: dashboardPath },
     ...(user?.role === 'AREA_OWNER'
       ? [
-          { id: 'review', name: 'Review Queue', icon: FileClock, path: '/area-owner/dashboard' },
+          { id: 'review', name: 'Area Owner Approval', icon: FileClock, path: '/area-owner/dashboard' },
           { id: 'compliance', name: 'Compliance Gate', icon: ShieldCheck, path: '/area-owner/dashboard' },
         ]
       : [
+          ...(isInitiator ? [{ id: 'initiated', name: 'Initiated PSSR', icon: FileClock, path: '/team/initiated' }] : []),
           { id: 'assigned', name: 'Assigned PSSR', icon: ClipboardCheck, path: '/team/assigned' },
           { id: 'compliance', name: 'Compliance Gate', icon: ShieldCheck, path: '/team/dashboard' },
         ]),

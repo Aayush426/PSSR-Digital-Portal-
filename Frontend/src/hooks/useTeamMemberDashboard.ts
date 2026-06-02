@@ -6,7 +6,10 @@ export function useTeamMemberDashboard() {
   return useQuery<TeamDashboardResponse, Error>({
     queryKey: ['team-member-dashboard'],
     queryFn: () => teamDashboardService.getDashboard(),
-    staleTime: 2 * 60 * 1000,
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    refetchInterval: 30 * 1000,
     retry: 2,
   });
 }

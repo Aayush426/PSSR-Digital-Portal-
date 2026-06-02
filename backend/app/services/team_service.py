@@ -3,6 +3,7 @@
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
+from app.core.logging import get_logger
 from app.models.pssr import PSSRActivityLog
 from app.models.pssr_task import PSSRTask
 from app.models.pssr_workflow import PSSRQuestion, PSSRQuestionResponse, PSSRTeamMemberAssignment, PSSRWorkflow
@@ -11,11 +12,13 @@ from app.models.permissions import PermissionCode
 from app.repositories.permission_repository import UserPermissionRepository
 from app.services.pssr_workflow_service import (
     APPROVED,
+    CLOSED,
     COMPLETED_BY_TEAM,
     IN_PROGRESS,
     PENDING_APPROVAL,
     TODO,
     UNDER_PREPARATION,
+    PSSRWorkflowService,
     equivalent_states,
     normalize_state,
 )
@@ -26,6 +29,8 @@ from app.schemas.team import (
     TeamDashboardStats,
     TeamDashboardTask,
 )
+
+logger = get_logger(__name__)
 
 
 class TeamService:
@@ -61,28 +66,32 @@ class TeamService:
             activity_query = activity_query.filter(PSSRActivityLog.user_id == current_user.id)
 
         under_preparation = [task for task in initiator_tasks if task.status == "Under Preparation"]
-        todo = [task for task in live_tasks if task.status == "To Do"] + [
+        assigned_todo = [task for task in live_tasks if task.status == "To Do"] + [
             TeamService._task_to_schema(task)
             for task in task_query.filter(PSSRTask.status == "Not Started")
             .order_by(PSSRTask.due_date.asc())
             .limit(25)
             .all()
         ]
-        in_progress = [task for task in live_tasks if task.status == "In Progress"] + [task for task in initiator_tasks if task.status == "In Progress"] + [
+        assigned_in_progress = [task for task in live_tasks if task.status == "In Progress"] + [
             TeamService._task_to_schema(task)
             for task in task_query.filter(PSSRTask.status == "In Progress")
             .order_by(PSSRTask.updated_at.desc())
             .limit(25)
             .all()
         ]
-        completed = [task for task in live_tasks if task.status == "Completed"] + [task for task in initiator_tasks if task.status == "Completed"] + [
+        assigned_completed = [task for task in live_tasks if task.status == "Completed"] + [
             TeamService._task_to_schema(task)
             for task in task_query.filter(PSSRTask.status == "Completed")
             .order_by(PSSRTask.updated_at.desc())
             .limit(25)
             .all()
         ]
-        approved = [task for task in initiator_tasks if task.workflow_state == APPROVED]
+        todo = assigned_todo + [task for task in initiator_tasks if task.status == "To Do"]
+        in_progress = assigned_in_progress + [task for task in initiator_tasks if task.status == "In Progress"]
+        completed = assigned_completed + [task for task in initiator_tasks if task.workflow_state == COMPLETED_BY_TEAM]
+        pending_review = [task for task in initiator_tasks if task.workflow_state == PENDING_APPROVAL]
+        approved = [task for task in initiator_tasks if task.workflow_state in {APPROVED, CLOSED, "REJECTED"}]
         activity = [
             TeamDashboardActivity(
                 id=str(item.id),
@@ -98,7 +107,9 @@ class TeamService:
         under_preparation = TeamService._dedupe_tasks(under_preparation)
         todo = TeamService._dedupe_tasks(todo)
         in_progress = TeamService._dedupe_tasks(in_progress)
-        completed = TeamService._dedupe_tasks(completed + approved)
+        completed = TeamService._dedupe_tasks(completed)
+        pending_review = TeamService._dedupe_tasks(pending_review)
+        approved = TeamService._dedupe_tasks(approved)
 
         return TeamDashboardResponse(
             draft=under_preparation,
@@ -106,15 +117,16 @@ class TeamService:
             todo=todo,
             in_progress=in_progress,
             completed=completed,
-            pending_review=[],
+            pending_review=pending_review,
+            approved=approved,
             activity=activity,
             stats=TeamDashboardStats(
                 draft_count=len(under_preparation),
-                assigned_count=len(todo),
-                todo_count=len(todo),
-                in_progress_count=len(in_progress),
-                completed_count=len(completed),
-                pending_review_count=0,
+                assigned_count=len(assigned_todo),
+                todo_count=len(assigned_todo),
+                in_progress_count=len(assigned_in_progress),
+                completed_count=len(assigned_completed),
+                pending_review_count=len(pending_review),
             ),
             is_pssr_initiator=is_initiator,
             initiator_stats=initiator_stats,
@@ -137,6 +149,11 @@ class TeamService:
         workflows = db.query(PSSRWorkflow).filter(
             PSSRWorkflow.initiator_user_id == current_user.id,
         ).order_by(PSSRWorkflow.updated_at.desc()).limit(50).all()
+        area_owner_ids = [workflow.area_owner_user_id for workflow in workflows if workflow.area_owner_user_id]
+        area_owners = {
+            user.id: user
+            for user in db.query(User).filter(User.id.in_(area_owner_ids)).all()
+        } if area_owner_ids else {}
         tasks = []
         for workflow in workflows:
             total = db.query(PSSRQuestion.id).filter(PSSRQuestion.pssr_id == workflow.pssr_id).count()
@@ -157,7 +174,7 @@ class TeamService:
             elif state == PENDING_APPROVAL:
                 status = "Completed"
                 department = "Area Owner Approval"
-            elif state in {COMPLETED_BY_TEAM, APPROVED}:
+            elif state in {COMPLETED_BY_TEAM, APPROVED, CLOSED}:
                 status = "Completed"
                 department = "Workflow Monitor"
             else:
@@ -175,6 +192,7 @@ class TeamService:
                 last_updated=workflow.updated_at.isoformat() if workflow.updated_at else None,
                 submitted_date=workflow.submitted_at.date().isoformat() if workflow.submitted_at else None,
                 reviewer_name=None,
+                area_owner=PSSRWorkflowService._user_brief(area_owners.get(workflow.area_owner_user_id)),
                 status=status,
                 workflow_state=state,
                 ownership="initiator",
@@ -218,24 +236,43 @@ class TeamService:
         rows = query.order_by(PSSRTeamMemberAssignment.updated_at.desc()).limit(50).all()
         tasks = []
         for assignment, workflow in rows:
-            total = db.query(PSSRQuestion.id).filter(
-                PSSRQuestion.pssr_id == workflow.pssr_id,
-                PSSRQuestion.department_owner == assignment.department,
-            ).count()
-            answered = db.query(PSSRQuestionResponse.id).join(
-                PSSRQuestion,
-                PSSRQuestion.id == PSSRQuestionResponse.pssr_question_id,
-            ).filter(
-                PSSRQuestion.pssr_id == workflow.pssr_id,
-                PSSRQuestion.department_owner == assignment.department,
+            questions = [
+                question
+                for question in db.query(PSSRQuestion).filter(
+                    PSSRQuestion.pssr_id == workflow.pssr_id,
+                    PSSRQuestion.assigned_user_id == assignment.user_id,
+                ).all()
+                if PSSRWorkflowService._department_matches(assignment.department, question.department_owner)
+                or PSSRWorkflowService._department_matches(question.department_owner, assignment.department)
+            ]
+            total = len(questions)
+            if total == 0:
+                continue
+            question_ids = [question.id for question in questions]
+            answered = db.query(PSSRQuestionResponse.id).filter(
+                PSSRQuestionResponse.pssr_question_id.in_(question_ids),
                 PSSRQuestionResponse.response.in_(["YES", "NO", "NA"]),
             ).count()
+            logger_payload = {
+                "savedDepartmentAssignments": {
+                    "department": assignment.department,
+                    "assignedMemberId": assignment.user_id,
+                },
+                "generatedCheckpointAssignments": [
+                    {
+                        "checkpoint.department": question.department_owner,
+                        "checkpoint.assignedTo": question.assigned_user_id,
+                    }
+                    for question in questions
+                ],
+            }
+            logger.info("assignmentMappingVisibility=%s", logger_payload)
             state = normalize_state(workflow.workflow_state)
             if state == PENDING_APPROVAL:
                 status = "Completed"
             elif assignment.status == "COMPLETED" or state in {COMPLETED_BY_TEAM, APPROVED}:
                 status = "Completed"
-            elif assignment.started_at or assignment.status == "IN_PROGRESS" or state == IN_PROGRESS or answered:
+            elif assignment.started_at or assignment.status == "IN_PROGRESS" or answered:
                 status = "In Progress"
             else:
                 status = "To Do"
@@ -254,12 +291,13 @@ class TeamService:
                 status=status,
                 workflow_state=state,
                 ownership="admin" if role == UserRole.ADMIN.value else "assigned_member",
-                can_start=state == TODO and role != UserRole.ADMIN.value,
+                can_start=assignment.status == "PENDING" and role != UserRole.ADMIN.value,
             ))
         leader_rows = []
         if role != UserRole.ADMIN.value:
             leader_rows = db.query(PSSRWorkflow).filter(
                 PSSRWorkflow.team_leader_user_id == current_user.id,
+                PSSRWorkflow.workflow_state.notin_(equivalent_states(UNDER_PREPARATION)),
             ).order_by(PSSRWorkflow.updated_at.desc()).limit(50).all()
         for workflow in leader_rows:
             if any(task.id == workflow.pssr_id and task.ownership == "assigned_member" for task in tasks):
@@ -314,6 +352,7 @@ class TeamService:
             in_progress=[],
             completed=[],
             pending_review=[],
+            approved=[],
             activity=[],
             stats=TeamDashboardStats(
                 draft_count=0,

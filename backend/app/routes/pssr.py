@@ -13,7 +13,12 @@ from app.repositories.pssr_repository import PSSRTaskRepository
 from app.schemas.pssr import UpdateInitiatorCapabilityRequest
 from app.schemas.pssr import (
     PSSRCreateRequest,
+    PSSRDepartmentFinalizationRequest,
+    PSSREditRequest,
+    PSSRMemberCompletionRequest,
+    PSSRPunchPointRequest,
     PSSRQuestionResponseRequest,
+    PSSRReopenDepartmentRequest,
     PSSRTransitionRequest,
 )
 from app.services.department_service import DepartmentService
@@ -220,6 +225,21 @@ def get_pssr(
     )
 
 
+@router.patch("/{pssr_id}", summary="Edit initiated PSSR workflow")
+def update_pssr(
+    pssr_id: str,
+    payload: PSSREditRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Update initiator-controlled PSSR header, assignments, annexures, and checkpoints."""
+
+    return success_response(
+        data=PSSRWorkflowService.update(db, pssr_id, payload, current_user),
+        message="PSSR workflow updated successfully.",
+    )
+
+
 @router.post("/{pssr_id}/submit", summary="Submit draft PSSR workflow")
 def submit_pssr(
     pssr_id: str,
@@ -250,6 +270,82 @@ def respond_to_pssr_question(
     )
 
 
+@router.post("/{pssr_id}/complete-my-side", summary="Complete assigned PSSR work for current user")
+def complete_my_side(
+    pssr_id: str,
+    payload: PSSRMemberCompletionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Lock the current user's assigned checkpoint responses and update workflow progress."""
+
+    return success_response(
+        data=PSSRWorkflowService.complete_my_side(db, pssr_id, payload.confirm, current_user),
+        message="Your PSSR assignment is completed and locked.",
+    )
+
+
+@router.post("/{pssr_id}/finalize-department-work", summary="Finalize department work after member completion")
+def finalize_department_work(
+    pssr_id: str,
+    payload: PSSRDepartmentFinalizationRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Let the team leader or initiator finalize member-completed department work."""
+
+    return success_response(
+        data=PSSRWorkflowService.finalize_department_work(db, pssr_id, payload.department, payload.confirm, current_user),
+        message="Department work finalized successfully.",
+    )
+
+
+@router.post("/{pssr_id}/reopen-department-work", summary="Reopen department work")
+def reopen_department_work(
+    pssr_id: str,
+    payload: PSSRReopenDepartmentRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Reopen selected department work so assigned members can edit again."""
+
+    return success_response(
+        data=PSSRWorkflowService.reopen_department_work(db, pssr_id, payload.departments, payload.confirm, current_user),
+        message="Department work reopened successfully.",
+    )
+
+
+@router.post("/{pssr_id}/punch-points", summary="Create a PSSR punchlist item")
+def create_punch_point(
+    pssr_id: str,
+    payload: PSSRPunchPointRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Create a manually tracked punchlist item. Editable by PSSR initiator only."""
+
+    return success_response(
+        data=PSSRWorkflowService.create_punch_point(db, pssr_id, payload, current_user),
+        message="Punchlist item created successfully.",
+    )
+
+
+@router.patch("/{pssr_id}/punch-points/{punch_point_id}", summary="Update a PSSR punchlist item")
+def update_punch_point(
+    pssr_id: str,
+    punch_point_id: int,
+    payload: PSSRPunchPointRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Update a punchlist item. Editable by PSSR initiator only before completion."""
+
+    return success_response(
+        data=PSSRWorkflowService.update_punch_point(db, pssr_id, punch_point_id, payload, current_user),
+        message="Punchlist item updated successfully.",
+    )
+
+
 @router.post("/{pssr_id}/transition", summary="Transition PSSR workflow state")
 def transition_pssr(
     pssr_id: str,
@@ -260,6 +356,6 @@ def transition_pssr(
     """Validate and persist a server-side workflow state transition."""
 
     return success_response(
-        data=PSSRWorkflowService.transition(db, pssr_id, payload.target_state, current_user, payload.remarks),
+        data=PSSRWorkflowService.transition(db, pssr_id, payload.target_state, current_user, payload.remarks, payload.area_owner_user_id),
         message="PSSR workflow transitioned successfully.",
     )

@@ -6,6 +6,9 @@ export function usePSSRDetail(pssrId?: string) {
     queryKey: ['pssr-detail', pssrId],
     queryFn: () => api.getPSSR(pssrId as string),
     enabled: Boolean(pssrId),
-    staleTime: 30 * 1000,
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    refetchInterval: 30 * 1000,
   });
 }

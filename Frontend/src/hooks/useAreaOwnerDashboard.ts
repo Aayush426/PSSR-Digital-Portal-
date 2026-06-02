@@ -6,7 +6,10 @@ export function useAreaOwnerDashboard() {
   return useQuery<AreaOwnerDashboardResponse, Error>({
     queryKey: ['area-owner-dashboard'],
     queryFn: () => areaOwnerDashboardService.getDashboard(),
-    staleTime: 2 * 60 * 1000,
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    refetchInterval: 30 * 1000,
     retry: 2,
   });
 }

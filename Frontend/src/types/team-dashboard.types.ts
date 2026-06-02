@@ -53,6 +53,7 @@ export interface TeamDashboardResponse {
   in_progress: TeamDashboardTask[];
   completed: TeamDashboardTask[];
   pending_review: TeamDashboardTask[];
+  approved: TeamDashboardTask[];
   activity: TeamDashboardActivity[];
   stats: TeamDashboardStats;
   is_pssr_initiator: boolean;

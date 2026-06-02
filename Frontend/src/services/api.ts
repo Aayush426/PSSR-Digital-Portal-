@@ -131,6 +131,33 @@ export interface CreatePSSRPayload {
   custom_questions?: Array<{ question_text: string; description: string; question_type: 'DOCUMENT' | 'FIELD'; department_owner: string; assigned_user_id?: number | null; category: string; mandatory: boolean; remarks?: string | null; attachments?: Array<Record<string, unknown>> }>;
 }
 
+export interface EditPSSRPayload {
+  plant_unit: string;
+  equipment_system: string;
+  moc_type: 'MOC' | 'NON_MOC';
+  moc_number?: string | null;
+  description?: string | null;
+  team_leader_user_id?: number | null;
+  area_owner_user_id?: number | null;
+  annexure_ids: number[];
+  assignments: Array<{ department: string; user_id: number; due_date?: string | null }>;
+  questions: Array<{
+    id?: number | null;
+    annexure_id?: number | null;
+    annexure_question_id?: number | null;
+    question_text: string;
+    description?: string | null;
+    question_type: 'DOCUMENT' | 'FIELD';
+    department_owner: string;
+    assigned_user_id?: number | null;
+    category: string;
+    mandatory: boolean;
+    custom: boolean;
+    remarks?: string | null;
+    attachments?: Array<Record<string, unknown>>;
+  }>;
+}
+
 export interface PSSRWorkflowDetail {
   pssr_id: string;
   title: string;
@@ -142,8 +169,10 @@ export interface PSSRWorkflowDetail {
   workflow_state: string;
   initiator_user_id?: number;
   team_leader_user_id?: number | null;
+  area_owner_user_id?: number | null;
   initiator?: { id: number; employee_id: string; full_name: string; email: string; department?: string | null; designation?: string | null } | null;
   team_leader?: { id: number; employee_id: string; full_name: string; email: string; department?: string | null; designation?: string | null } | null;
+  area_owner?: { id: number; employee_id: string; full_name: string; email: string; department?: string | null; designation?: string | null } | null;
   started_at?: string | null;
   submitted_at?: string | null;
   started_by_user_id?: number | null;
@@ -216,7 +245,7 @@ export interface PSSRWorkflowDetail {
     } | null;
   }>;
   annexures?: Array<{ id: number; code: string; title: string; revision: string; status: string; selected_at: string }>;
-  punch_points?: Array<{ id: number; title: string; description?: string | null; category: string; severity: string; status: string; owning_department: string; assigned_to_user_id?: number | null; question_id?: number | null; workflow_reference?: string; due_date?: string | null; created_at: string }>;
+  punch_points?: Array<{ id: number; title: string; description?: string | null; category: string; severity: string; status: string; owning_department: string; assigned_to_user_id?: number | null; assigned_to_user?: { id: number; employee_id: string; full_name: string; email: string; department?: string | null; designation?: string | null } | null; question_id?: number | null; workflow_reference?: string; due_date?: string | null; remarks?: string | null; created_at: string; updated_at?: string | null }>;
   audit_timeline?: Array<{ id: number; action: string; summary: string; actor_user_id?: number | null; actor?: { id: number; employee_id: string; full_name: string; email: string; department?: string | null; designation?: string | null } | null; department?: string | null; metadata: Record<string, unknown>; created_at: string }>;
   permissions?: {
     is_admin: boolean;
@@ -225,6 +254,10 @@ export interface PSSRWorkflowDetail {
     is_assigned_member: boolean;
     can_submit?: boolean;
     can_edit_header: boolean;
+    can_edit_punchlist?: boolean;
+    can_complete_my_side?: boolean;
+    can_finalize_department_work?: boolean;
+    can_send_to_area_owner?: boolean;
     editable_departments: string[];
   };
 }
@@ -468,13 +501,14 @@ export const api = {
     return apiRequest<PaginatedUsersResponse>(`/admin/users${suffix}`);
   },
 
-  listTeamDirectory(params: { page?: number; limit?: number; search?: string; department?: string; includeAllRoles?: boolean } = {}): Promise<PaginatedUsersResponse> {
+  listTeamDirectory(params: { page?: number; limit?: number; search?: string; department?: string; includeAllRoles?: boolean; role?: Role } = {}): Promise<PaginatedUsersResponse> {
     const query = new URLSearchParams();
     query.set('page', String(params.page ?? 1));
     query.set('limit', String(params.limit ?? 50));
     if (params.search) query.set('search', params.search);
     if (params.department) query.set('department', params.department);
     if (params.includeAllRoles) query.set('include_all_roles', 'true');
+    if (params.role) query.set('role', params.role);
     return apiRequest<PaginatedUsersResponse>(`/team/users/directory?${query.toString()}`);
   },
 
@@ -498,6 +532,13 @@ export const api = {
     return apiRequest<PSSRWorkflowDetail>(`/pssr/${encodeURIComponent(pssrId)}`);
   },
 
+  updatePSSR(pssrId: string, payload: EditPSSRPayload): Promise<PSSRWorkflowDetail> {
+    return apiRequest<PSSRWorkflowDetail>(`/pssr/${encodeURIComponent(pssrId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  },
+
   submitPSSR(pssrId: string): Promise<PSSRWorkflowDetail> {
     return apiRequest<PSSRWorkflowDetail>(`/pssr/${encodeURIComponent(pssrId)}/submit`, {
       method: 'POST',
@@ -507,6 +548,48 @@ export const api = {
   respondToPSSRQuestion(pssrId: string, questionId: number, payload: { response: 'YES' | 'NO' | 'NA' | 'PENDING'; remarks?: string | null; attachments?: Array<Record<string, unknown>> }): Promise<NonNullable<PSSRWorkflowDetail['questions']>[number]> {
     return apiRequest<NonNullable<PSSRWorkflowDetail['questions']>[number]>(`/pssr/${encodeURIComponent(pssrId)}/questions/${questionId}/respond`, {
       method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  transitionPSSR(pssrId: string, targetState: 'PENDING_AREA_OWNER_APPROVAL' | 'APPROVED' | 'REJECTED' | 'CLOSED', remarks?: string | null, areaOwnerUserId?: number | null): Promise<PSSRWorkflowDetail> {
+    return apiRequest<PSSRWorkflowDetail>(`/pssr/${encodeURIComponent(pssrId)}/transition`, {
+      method: 'POST',
+      body: JSON.stringify({ target_state: targetState, remarks: remarks ?? null, area_owner_user_id: areaOwnerUserId ?? null }),
+    });
+  },
+
+  completeMyPSSRSide(pssrId: string): Promise<PSSRWorkflowDetail> {
+    return apiRequest<PSSRWorkflowDetail>(`/pssr/${encodeURIComponent(pssrId)}/complete-my-side`, {
+      method: 'POST',
+      body: JSON.stringify({ confirm: true }),
+    });
+  },
+
+  finalizeDepartmentWork(pssrId: string, department?: string | null): Promise<PSSRWorkflowDetail> {
+    return apiRequest<PSSRWorkflowDetail>(`/pssr/${encodeURIComponent(pssrId)}/finalize-department-work`, {
+      method: 'POST',
+      body: JSON.stringify({ department: department ?? null, confirm: true }),
+    });
+  },
+
+  reopenDepartmentWork(pssrId: string, departments: string[]): Promise<PSSRWorkflowDetail> {
+    return apiRequest<PSSRWorkflowDetail>(`/pssr/${encodeURIComponent(pssrId)}/reopen-department-work`, {
+      method: 'POST',
+      body: JSON.stringify({ departments, confirm: true }),
+    });
+  },
+
+  createPSSRPunchPoint(pssrId: string, payload: { title: string; description: string; category: 'A' | 'B' | 'C'; owning_department: string; assigned_to_user_id?: number | null; due_date?: string | null; closure_remarks?: string | null; status?: 'OPEN' | 'IN_PROGRESS' | 'CLOSED'; question_id?: number | null }): Promise<NonNullable<PSSRWorkflowDetail['punch_points']>[number]> {
+    return apiRequest<NonNullable<PSSRWorkflowDetail['punch_points']>[number]>(`/pssr/${encodeURIComponent(pssrId)}/punch-points`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updatePSSRPunchPoint(pssrId: string, punchPointId: number, payload: { title: string; description: string; category: 'A' | 'B' | 'C'; owning_department: string; assigned_to_user_id?: number | null; due_date?: string | null; closure_remarks?: string | null; status?: 'OPEN' | 'IN_PROGRESS' | 'CLOSED'; question_id?: number | null }): Promise<NonNullable<PSSRWorkflowDetail['punch_points']>[number]> {
+    return apiRequest<NonNullable<PSSRWorkflowDetail['punch_points']>[number]>(`/pssr/${encodeURIComponent(pssrId)}/punch-points/${punchPointId}`, {
+      method: 'PATCH',
       body: JSON.stringify(payload),
     });
   },

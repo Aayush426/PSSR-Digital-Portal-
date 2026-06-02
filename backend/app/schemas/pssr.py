@@ -45,8 +45,17 @@ class InitiatorStats(BaseModel):
 
 WorkflowState = Literal[
     "UNDER_PREPARATION",
+    "SUBMITTED",
     "TODO",
     "IN_PROGRESS",
+    "COMPLETED_BY_DEPARTMENT",
+    "PENDING_AREA_OWNER_APPROVAL",
+    "AREA_OWNER_PENDING",
+    "AREA_OWNER_APPROVED",
+    "FINAL_APPROVED",
+    "CLOSED",
+    "REOPENED",
+    "COMPLETED",
     "COMPLETED_BY_TEAM",
     "PENDING_APPROVAL",
     "APPROVED",
@@ -97,8 +106,43 @@ class PSSRCreateRequest(BaseModel):
     custom_questions: list[PSSRCustomQuestionIn] = []
 
 
+class PSSREditQuestionIn(BaseModel):
+    id: Optional[int] = None
+    annexure_id: Optional[int] = None
+    annexure_question_id: Optional[int] = None
+    question_text: str = Field(..., min_length=3, max_length=4000)
+    description: Optional[str] = Field(None, max_length=4000)
+    question_type: CheckpointType = "FIELD"
+    department_owner: str = Field(..., min_length=2, max_length=120)
+    assigned_user_id: Optional[int] = None
+    category: str = Field("General", max_length=120)
+    mandatory: bool = True
+    custom: bool = False
+    remarks: Optional[str] = Field(None, max_length=4000)
+    attachments: list[dict[str, Any]] = []
+
+
+class PSSREditRequest(BaseModel):
+    plant_unit: str = Field(..., min_length=2, max_length=120)
+    equipment_system: str = Field(..., min_length=2, max_length=255)
+    moc_type: Literal["MOC", "NON_MOC"]
+    moc_number: Optional[str] = Field(None, max_length=120)
+    description: Optional[str] = Field(None, max_length=4000)
+    team_leader_user_id: Optional[int] = None
+    area_owner_user_id: Optional[int] = None
+    annexure_ids: list[int] = []
+    assignments: list[PSSRTeamAssignmentIn] = []
+    questions: list[PSSREditQuestionIn] = []
+
+
+class PSSRReopenDepartmentRequest(BaseModel):
+    departments: list[str] = Field(..., min_length=1)
+    confirm: bool = True
+
+
 class PSSRTransitionRequest(BaseModel):
     target_state: WorkflowState
+    area_owner_user_id: Optional[int] = None
     remarks: Optional[str] = Field(None, max_length=1000)
 
 
@@ -106,6 +150,27 @@ class PSSRQuestionResponseRequest(BaseModel):
     response: Literal["YES", "NO", "NA", "PENDING"]
     remarks: Optional[str] = Field(None, max_length=4000)
     attachments: list[dict[str, Any]] = []
+
+
+class PSSRMemberCompletionRequest(BaseModel):
+    confirm: bool = True
+
+
+class PSSRDepartmentFinalizationRequest(BaseModel):
+    department: Optional[str] = Field(None, min_length=2, max_length=120)
+    confirm: bool = True
+
+
+class PSSRPunchPointRequest(BaseModel):
+    title: str = Field(..., min_length=3, max_length=255)
+    description: str = Field(..., min_length=3, max_length=4000)
+    category: Literal["A", "B", "C"] = "B"
+    owning_department: str = Field(..., min_length=2, max_length=120)
+    assigned_to_user_id: Optional[int] = None
+    due_date: Optional[datetime] = None
+    closure_remarks: Optional[str] = Field(None, max_length=4000)
+    status: Literal["OPEN", "IN_PROGRESS", "CLOSED"] = "OPEN"
+    question_id: Optional[int] = None
 
 
 class PSSRWorkflowSummary(BaseModel):

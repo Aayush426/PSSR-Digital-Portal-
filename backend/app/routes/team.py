@@ -40,6 +40,7 @@ def team_member_directory(
     department: Optional[str] = Query(None, max_length=100),
     search: Optional[str] = Query(None, max_length=100),
     include_all_roles: bool = Query(False),
+    role: Optional[UserRole] = Query(None),
     _: User = Depends(require_team_member_or_admin),
     db: Session = Depends(get_db),
 ):
@@ -49,8 +50,8 @@ def team_member_directory(
         db=db,
         page=page,
         limit=limit,
-        role=None if include_all_roles else UserRole.TEAM_MEMBER,
-        department=None if include_all_roles else department,
+        role=role if include_all_roles else UserRole.TEAM_MEMBER,
+        department=department,
         active=True,
         search=search,
     )

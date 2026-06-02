@@ -124,7 +124,7 @@ export const pssrRecordsData = [
     type: 'MOC',
     initiator: { name: 'A. Sharma', initial: 'AS' },
     areaOwner: 'John Doe',
-    state: 'Pending Site Visit',
+    state: 'Completed by Department',
     department: 'Mechanical',
     date: '24 Oct 2023',
   },
@@ -151,7 +151,7 @@ export const pssrRecordsData = [
     type: 'MOC',
     initiator: { name: 'B. Thompson', initial: 'BT' },
     areaOwner: 'John Doe',
-    state: 'Pending Site Visit',
+    state: 'Completed by Department',
     department: 'Mechanical',
     date: '19 Oct 2023',
   },
@@ -184,7 +184,7 @@ export const statsAnnexures = [
 
 export const statsPSSR = [
   { label: 'Total Records', value: '1,248', trend: '+12 this week' },
-  { label: 'Pending Site Visit', value: '42', alert: 'High Priority', color: 'error' },
+  { label: 'Pending Area Approval', value: '42', alert: 'High Priority', color: 'error' },
   { label: 'Under Review', value: '156', meta: 'Avg 3.2 days' },
   { label: 'Completed (30d)', value: '89', meta: '98% compliance' },
 ];

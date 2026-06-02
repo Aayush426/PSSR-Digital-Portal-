@@ -19,6 +19,7 @@ class TeamDashboardTask(BaseModel):
     last_updated: Optional[str] = None
     submitted_date: Optional[str] = None
     reviewer_name: Optional[str] = None
+    area_owner: Optional[dict] = None
     status: Optional[Literal["Under Preparation", "To Do", "In Progress", "Completed"]] = None
     workflow_state: Optional[str] = None
     ownership: Optional[Literal["initiator", "team_leader", "assigned_member", "admin", "legacy"]] = None
@@ -49,6 +50,7 @@ class TeamDashboardResponse(BaseModel):
     in_progress: List[TeamDashboardTask]
     completed: List[TeamDashboardTask]
     pending_review: List[TeamDashboardTask] = []
+    approved: List[TeamDashboardTask] = []
     activity: List[TeamDashboardActivity]
     stats: TeamDashboardStats
     is_pssr_initiator: bool = False

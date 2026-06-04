@@ -1,0 +1,15 @@
+- [x] Located PSSR edit UI code in: Frontend/src/pages/team/DashboardPage.tsx
+- [x] Address leadership dropdown clipping in PSSREditWorkspace:
+  - Ensure leadership section/modal uses overflow-visible
+  - Ensure leadership container has higher z-index
+  - Ensure selects have higher z-index so dropdowns render above modal overlay
+- [x] Address annexure selection not regenerating checkpoints in edit mode:
+  - Regenerate annexure-derived questions from currently selected annexureIds
+  - Map annexure detail query data by annexureId to avoid index alignment issues
+  - Merge regenerated template questions with existing custom questions while deduping template questions
+- [ ] (Blocked) Run Frontend build/typecheck to verify compilation:
+  - Current tool command runner mangles Windows command chaining operators (&amp;&amp; / & / etc), so npm scripts could not be executed reliably
+- [ ] Manual verification checklist:
+  - [ ] In Edit PSSR modal, open “PSSR Leadership” and confirm “Select area owner” dropdown is not clipped
+  - [ ] In Edit mode, toggle annexures and confirm annexure-derived checkpoints/questions regenerate under “Checkpoints”
+  - [ ] Confirm custom questions persist after annexure changes

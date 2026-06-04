@@ -1,0 +1,6 @@
+- [ ] Edit Frontend/src/pages/team/DashboardPage.tsx
+  - [ ] Fix “Select area owner” dropdown clipped/out-of-bounds in Edit PSSR modal (PSSREditWorkspace)
+  - [ ] Fix checkpoints section in Edit PSSR: when selecting annexures, regenerate template checkpoints (from annexure details) under Checkpoints; preserve existing custom questions
+  - [ ] Update annexure toggle handler to only update annexureIds
+  - [ ] Add memo/effect to merge generated annexure questions + existing custom questions
+- [ ] Run frontend typecheck/lint/tests (if available)

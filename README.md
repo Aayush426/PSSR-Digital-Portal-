@@ -327,13 +327,6 @@ python3 -m app.scripts.seed_users
 python3 -m app.scripts.seed_annexures
 ```
 
-Default seeded admin:
-
-```text
-Email: admin@nayara.com
-Password: Admin@12345
-```
-
 ## Database Bootstrap
 
 The project currently uses SQLAlchemy `create_all` plus idempotent bootstrap helpers.

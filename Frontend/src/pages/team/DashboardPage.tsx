@@ -125,6 +125,14 @@ const defaultPSSRForm = (): PSSRFormState => ({
   customQuestions: [],
 });
 
+function useScrollLock() {
+  useEffect(() => {
+    const originalStyle = window.getComputedStyle(document.body).overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = originalStyle; };
+  }, []);
+}
+
 export const TeamMemberDashboard: React.FC = () => {
   const isAssignedWorkspace = window.location.pathname.startsWith('/team/assigned');
   const isInitiatedWorkspace = window.location.pathname.startsWith('/team/initiated');
@@ -428,6 +436,7 @@ export const TeamMemberDashboard: React.FC = () => {
 export const TeamDashboardPage = TeamMemberDashboard;
 
 const CreatePSSRPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  useScrollLock();
   const [form, setForm] = useState<PSSRFormState>(() => defaultPSSRForm());
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
@@ -1838,6 +1847,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, tab, index, onDetails }) => (
 );
 
 const PSSRDetailsPanel: React.FC<{ pssrId: string; onClose: () => void }> = ({ pssrId, onClose }) => {
+  useScrollLock();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const detailQuery = usePSSRDetail(pssrId);
@@ -2008,7 +2018,7 @@ const PSSRDetailsPanel: React.FC<{ pssrId: string; onClose: () => void }> = ({ p
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-on-surface/40 backdrop-blur-sm p-3 md:p-6 overflow-y-auto">
+    <div className={`fixed inset-0 z-50 bg-on-surface/40 backdrop-blur-sm p-3 md:p-6 ${showEditWorkspace || showReopenWorkspace ? 'overflow-hidden' : 'overflow-y-auto'}`}>
       <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} className="mx-auto max-w-6xl bg-surface-container-lowest border border-outline-variant rounded shadow-xl">
         <div className="sticky top-0 z-10 bg-surface-container-lowest border-b border-outline-variant px-4 md:px-6 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
@@ -2359,6 +2369,7 @@ function initialEditAssignments(pssr: PSSRWorkflowDetail): EditAssignmentDraft[]
 }
 
 const PSSREditWorkspace: React.FC<{ pssr: PSSRWorkflowDetail; onClose: () => void; onSaved: () => void }> = ({ pssr, onClose, onSaved }) => {
+  useScrollLock();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -2497,18 +2508,47 @@ const PSSREditWorkspace: React.FC<{ pssr: PSSRWorkflowDetail; onClose: () => voi
   };
   const addAssignment = () => setAssignments((current) => [...current, { department: '', userId: '' }]);
   const addCustomQuestion = () => setQuestions((current) => [...current, { id: null, questionText: '', description: '', checkpointType: 'FIELD', departmentOwner: assignments[0]?.department ?? 'Others', assignedUserId: assignments[0]?.userId ?? '', category: 'Custom', mandatory: true, custom: true, remarks: '' }]);
-  const toggleAnnexure = (id: number) => setAnnexureIds((current) => {
-    const selected = current.includes(String(id));
-    if (selected) {
+  const toggleAnnexure = async (id: number) => {
+    const strId = String(id);
+    if (annexureIds.includes(strId)) {
       setQuestions((items) => items.filter((question) => question.annexureId !== id));
-      return current.filter((item) => item !== String(id));
+      setAnnexureIds((current) => current.filter((item) => item !== strId));
+    } else {
+      setAnnexureIds((current) => [...current, strId]);
+      try {
+        const detail = await queryClient.fetchQuery({
+          queryKey: ['annexure-detail', id, undefined],
+          queryFn: () => annexureService.detail(id),
+          staleTime: 5 * 60 * 1000,
+        });
+        if (detail) {
+          setQuestions((current) => {
+            const newQuestions = detail.sections.flatMap(s => s.questions).map((q) => ({
+              id: null,
+              annexureId: id,
+              annexureQuestionId: q.id,
+              questionText: q.question_text,
+              description: q.question_description ?? '',
+              checkpointType: q.question_type ?? 'FIELD',
+              departmentOwner: q.department_owner,
+              assignedUserId: assignments.find((a) => a.department === q.department_owner)?.userId ?? '',
+              category: 'Annexure',
+              mandatory: true,
+              custom: false,
+              remarks: '',
+            }));
+            return [...current, ...newQuestions];
+          });
+        }
+      } catch (err) {
+        console.error('Failed to load annexure questions', err);
+      }
     }
-    return [...current, String(id)];
-  });
+  };
   return (
-    <div className="fixed inset-0 z-[60] bg-on-surface/50 backdrop-blur-sm p-3 md:p-6 overflow-y-auto">
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="mx-auto max-w-7xl rounded border border-outline-variant bg-surface-container-lowest shadow-xl">
-        <div className="sticky top-0 z-10 flex flex-col gap-3 border-b border-outline-variant bg-surface-container-lowest px-4 py-4 md:flex-row md:items-center md:justify-between">
+    <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-on-surface/50 p-3 backdrop-blur-sm sm:p-6 overscroll-none">
+      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="flex w-full max-w-7xl flex-col overflow-hidden rounded border border-outline-variant bg-surface-container-lowest shadow-xl" style={{ maxHeight: '100%' }}>
+        <div className="flex-none flex flex-col gap-3 border-b border-outline-variant bg-surface-container-lowest px-4 py-4 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-[10px] font-black uppercase tracking-widest text-primary">Edit PSSR</p>
             <h2 className="text-headline-sm font-black text-on-surface">{pssr.pssr_id}</h2>
@@ -2518,7 +2558,7 @@ const PSSREditWorkspace: React.FC<{ pssr: PSSRWorkflowDetail; onClose: () => voi
             <button onClick={onClose} className="rounded border border-outline-variant px-4 py-2 text-label-sm font-black text-on-surface">Cancel Edit</button>
           </div>
         </div>
-        <div className="space-y-5 p-4 md:p-6">
+        <div className="flex-1 overflow-y-auto overscroll-contain space-y-5 p-4 md:p-6">
           {error && <div className="rounded border border-error/30 bg-error/5 px-4 py-3 text-body-sm font-bold text-error">{error}</div>}
           <section className="rounded border border-outline-variant bg-surface-container-lowest p-4">
             <div className="mb-4 flex items-center justify-between gap-3">
@@ -2548,12 +2588,12 @@ const PSSREditWorkspace: React.FC<{ pssr: PSSRWorkflowDetail; onClose: () => voi
               </div>
             </div>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_1fr]">
-              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search leader or department members" className="h-10 rounded border border-outline-variant bg-transparent px-3 text-body-sm outline-none" />
-              <select value={teamLeaderId} onChange={(event) => setTeamLeaderId(event.target.value)} className="h-10 rounded border border-outline-variant bg-transparent px-3 text-body-sm">
+              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search leader or department members" className="h-10 w-full min-w-0 rounded border border-outline-variant bg-transparent px-3 text-body-sm outline-none" />
+              <select value={teamLeaderId} onChange={(event) => setTeamLeaderId(event.target.value)} className="h-10 w-full min-w-0 rounded border border-outline-variant bg-transparent px-3 text-body-sm">
                 <option value="">Select team leader</option>
                 {teamMembers.map((user) => <option key={user.id} value={user.id}>{memberOptionLabel(user)}</option>)}
               </select>
-              <select value={areaOwnerId} onChange={(event) => setAreaOwnerId(event.target.value)} className="h-10 rounded border border-outline-variant bg-transparent px-3 text-body-sm">
+              <select value={areaOwnerId} onChange={(event) => setAreaOwnerId(event.target.value)} className="h-10 w-full min-w-0 rounded border border-outline-variant bg-transparent px-3 text-body-sm">
                 <option value="">Select area owner</option>
                 {areaOwners.map((user) => <option key={user.id} value={user.id}>{memberOptionLabel(user)}</option>)}
               </select>
@@ -2638,6 +2678,7 @@ const PSSREditWorkspace: React.FC<{ pssr: PSSRWorkflowDetail; onClose: () => voi
 };
 
 const ReopenWorkDialog: React.FC<{ pssr: PSSRWorkflowDetail; onClose: () => void; onSaved: () => void }> = ({ pssr, onClose, onSaved }) => {
+  useScrollLock();
   const [selected, setSelected] = useState<string[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const mutation = useMutation({

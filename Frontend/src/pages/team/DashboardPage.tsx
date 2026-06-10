@@ -1852,6 +1852,7 @@ const PSSRDetailsPanel: React.FC<{ pssrId: string; onClose: () => void }> = ({ p
   const queryClient = useQueryClient();
   const detailQuery = usePSSRDetail(pssrId);
   const [responses, setResponses] = useState<Record<number, { response: 'YES' | 'NO' | 'NA' | 'PENDING'; remarks: string; attachments: Array<Record<string, unknown>> }>>({});
+  const [uploads, setUploads] = useState<Record<number, File | undefined>>({});
   const [punchDrafts, setPunchDrafts] = useState<Record<number, Partial<PunchPayload>>>({});
   const [message, setMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<PSSRDetailTab>('details');
@@ -1879,6 +1880,31 @@ const PSSRDetailsPanel: React.FC<{ pssrId: string; onClose: () => void }> = ({ p
     mutationFn: ({ questionId, payload }: { questionId: number; payload: { response: 'YES' | 'NO' | 'NA' | 'PENDING'; remarks?: string | null; attachments?: Array<Record<string, unknown>> } }) => api.respondToPSSRQuestion(pssrId, questionId, payload),
     onSuccess: () => {
       setMessage('Response saved.');
+      invalidate();
+    },
+    onError: (error: Error) => setMessage(error.message),
+  });
+  const saveAllMutation = useMutation({
+    mutationFn: async () => {
+      const questionsToSave = detailQuery.data?.questions?.filter(q => Boolean(q.can_answer)) ?? [];
+      for (const question of questionsToSave) {
+        const draft = responses[question.id] ?? {
+          response: (question.latest_response?.response as 'YES' | 'NO' | 'NA' | 'PENDING' | undefined) ?? 'PENDING',
+          remarks: question.latest_response?.remarks ?? '',
+          attachments: question.latest_response?.attachments ?? [],
+        };
+        const file = uploads[question.id];
+        const payload = {
+          ...draft,
+          attachments: file
+            ? [{ file_name: file.name, file_type: file.type, size: file.size, storage_path: `pending-browser-upload/${file.name}` }]
+            : draft.attachments,
+        };
+        await api.respondToPSSRQuestion(pssrId, question.id, payload);
+      }
+    },
+    onSuccess: () => {
+      setMessage('All responses saved.');
       invalidate();
     },
     onError: (error: Error) => setMessage(error.message),
@@ -2261,7 +2287,12 @@ const PSSRDetailsPanel: React.FC<{ pssrId: string; onClose: () => void }> = ({ p
               </section>}
 
               {activeTab === 'details' && <section className="space-y-3">
-                <h3 className="text-label-md font-black uppercase text-on-surface">Questions</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-label-md font-black uppercase text-on-surface">Questions</h3>
+                  {(detail.questions ?? []).some((q) => q.can_answer) && !isAdmin && (
+                    <button disabled={saveAllMutation.isPending || respondMutation.isPending} onClick={() => saveAllMutation.mutate()} className="h-8 rounded bg-primary px-3 text-label-sm font-black text-on-primary disabled:opacity-50 hover:bg-primary/90">Save All</button>
+                  )}
+                </div>
                 {(detail.questions ?? []).map((question) => {
                   const canAnswer = Boolean(question.can_answer) && !isAdmin;
                   const draft = responses[question.id] ?? {
@@ -2281,15 +2312,32 @@ const PSSRDetailsPanel: React.FC<{ pssrId: string; onClose: () => void }> = ({ p
                         </div>
                       </div>
                       {canAnswer ? (
-                        <div className="mt-3 grid grid-cols-1 md:grid-cols-[140px_1fr_auto] gap-2">
+                        <div className="mt-3 grid grid-cols-1 md:grid-cols-[140px_1fr_180px_auto] gap-2">
                           <select value={draft.response} onChange={(event) => updateDraft(question.id, { response: event.target.value as 'YES' | 'NO' | 'NA' | 'PENDING' })} className="h-10 rounded border border-outline-variant bg-transparent px-3 text-body-sm outline-none">
                             {['PENDING', 'YES', 'NO', 'NA'].map((item) => <option key={item} value={item}>{item}</option>)}
                           </select>
                           <input value={draft.remarks} onChange={(event) => updateDraft(question.id, { remarks: event.target.value })} placeholder="Remarks or evidence reference" className="h-10 rounded border border-outline-variant bg-transparent px-3 text-body-sm outline-none" />
-                          <button disabled={respondMutation.isPending} onClick={() => respondMutation.mutate({ questionId: question.id, payload: draft })} className="h-10 rounded bg-primary px-3 text-label-sm font-black text-on-primary disabled:opacity-50">Save</button>
+                          <label className="flex h-10 cursor-pointer items-center justify-center rounded border border-outline-variant bg-surface-container-lowest px-3 text-[11px] font-bold text-on-surface hover:bg-surface-container-low transition-colors">
+                            <span>Add Attachment</span>
+                            <input type="file" accept=".jpg,.jpeg,.pdf" onChange={(event) => setUploads((current) => ({ ...current, [question.id]: event.target.files?.[0] }))} className="hidden" />
+                          </label>
+                          <button disabled={respondMutation.isPending} onClick={() => {
+                            const file = uploads[question.id];
+                            respondMutation.mutate({ questionId: question.id, payload: {
+                              ...draft,
+                              attachments: file
+                                ? [{ file_name: file.name, file_type: file.type, size: file.size, storage_path: `pending-browser-upload/${file.name}` }]
+                                : draft.attachments,
+                            } });
+                          }} className="h-10 rounded bg-primary px-3 text-label-sm font-black text-on-primary disabled:opacity-50">Save</button>
                         </div>
                       ) : (
                         <p className="mt-3 text-label-sm font-bold text-on-surface-variant">{question.latest_response ? `${question.latest_response.response} - ${question.latest_response.remarks ?? 'No remarks'}` : 'Read-only for your role or department.'}</p>
+                      )}
+                      {(draft.attachments?.length > 0 || uploads[question.id]) && (
+                        <div className="mt-2 text-[11px] text-on-surface-variant font-medium">
+                          {uploads[question.id] ? `Pending upload: ${uploads[question.id]?.name}` : `Attached: ${(draft.attachments[0] as any)?.file_name ?? 'Document'}`}
+                        </div>
                       )}
                     </div>
                   );

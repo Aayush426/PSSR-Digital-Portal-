@@ -189,6 +189,7 @@ class UserService:
                         User.employee_id.ilike(search_value),
                         User.full_name.ilike(search_value),
                         User.email.ilike(search_value),
+                        User.department.ilike(search_value),
                         User.designation.ilike(search_value),
                     )
                 )

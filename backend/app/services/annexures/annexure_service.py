@@ -743,6 +743,8 @@ class AnnexureService:
                 severity="HIGH" if question.required else "MEDIUM",
                 status="OPEN",
                 owning_department=question.checked_by_department,
+                assigned_to_user_id=None,
+                assigned_by_user_id=None,
                 raised_by_user_id=current_user.id,
             )
         )

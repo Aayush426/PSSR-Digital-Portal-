@@ -30,7 +30,9 @@ from app.models.pssr_task import PSSRTask
 from app.models.pssr_workflow import (
     PSSRAnnexureSelection,
     PSSRAuditLog,
+    PSSRCheckpointAttachment,
     PSSRNotification,
+    PSSRPunchPointEvidence,
     PSSRQuestion,
     PSSRQuestionResponse,
     PSSRTeamMemberAssignment,

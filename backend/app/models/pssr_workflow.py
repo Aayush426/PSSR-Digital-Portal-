@@ -153,6 +153,49 @@ class PSSRQuestionResponse(Base):
     )
 
 
+class PSSRCheckpointAttachment(Base):
+    """Uploaded evidence file attached to a checkpoint response."""
+
+    __tablename__ = "pssr_checkpoint_attachments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    pssr_id = Column(String(64), ForeignKey("pssr_workflows.pssr_id", ondelete="CASCADE"), nullable=False, index=True)
+    checkpoint_id = Column(Integer, ForeignKey("pssr_questions.id", ondelete="CASCADE"), nullable=False, index=True)
+    response_id = Column(Integer, ForeignKey("pssr_question_responses.id", ondelete="CASCADE"), nullable=True, index=True)
+    file_name = Column(String(255), nullable=False)
+    storage_path = Column(String(500), nullable=False)
+    content_type = Column(String(120), nullable=False)
+    size = Column(Integer, nullable=False, default=0)
+    uploaded_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    uploader_employee_code = Column(String(120), nullable=False)
+    uploaded_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    __table_args__ = (
+        Index("ix_pssr_checkpoint_attachments_pssr_checkpoint", "pssr_id", "checkpoint_id"),
+    )
+
+
+class PSSRPunchPointEvidence(Base):
+    """Uploaded closure evidence attached to a punch point."""
+
+    __tablename__ = "pssr_punch_point_evidence"
+
+    id = Column(Integer, primary_key=True, index=True)
+    pssr_id = Column(String(64), ForeignKey("pssr_workflows.pssr_id", ondelete="CASCADE"), nullable=False, index=True)
+    punch_point_id = Column(Integer, ForeignKey("annexure_punch_points.id", ondelete="CASCADE"), nullable=False, index=True)
+    file_name = Column(String(255), nullable=False)
+    storage_path = Column(String(500), nullable=False)
+    content_type = Column(String(120), nullable=False)
+    size = Column(Integer, nullable=False, default=0)
+    uploaded_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    uploader_employee_code = Column(String(120), nullable=False)
+    uploaded_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    __table_args__ = (
+        Index("ix_pssr_punch_evidence_pssr_punch", "pssr_id", "punch_point_id"),
+    )
+
+
 class PSSRNotification(Base):
     """In-app notification record with email-ready metadata."""
 
@@ -189,4 +232,3 @@ class PSSRAuditLog(Base):
     __table_args__ = (
         Index("ix_pssr_audit_pssr_created", "pssr_id", "created_at"),
     )
-

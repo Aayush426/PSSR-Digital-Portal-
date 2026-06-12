@@ -13,13 +13,13 @@ import { usePSSRDetail } from '../../hooks/usePSSRDetail';
 import { useTeamDirectory } from '../../hooks/useTeamDirectory';
 import { useTeamMemberDashboard } from '../../hooks/useTeamMemberDashboard';
 import { annexureService } from '../../services/annexureService';
-import { api, type AdminUser, type PSSRWorkflowDetail } from '../../services/api';
+import { api, type AdminUser, type CheckpointAttachment, type CheckpointAttachmentPayload, type PSSRWorkflowDetail } from '../../services/api';
 import type { AnnexureQuestion, AnnexureSummary } from '../../types/annexure.types';
 import type { TeamDashboardTask } from '../../types/team-dashboard.types';
 import { canInitiatePSSR } from '../../utils/rbac';
 
-type TeamDashboardTab = 'preparation' | 'todo' | 'in_progress' | 'completed' | 'approval' | 'approved' | 'closed' | 'rejected';
-type PSSRDetailTab = 'details' | 'punchlist' | 'history';
+type TeamDashboardTab = 'preparation' | 'todo' | 'in_progress' | 'completed' | 'approval' | 'approved' | 'closed' | 'rejected' | 'assigned_punch_points';
+type PSSRDetailTab = 'details' | 'punchlist' | 'assigned_punch_points' | 'history';
 type PSSRKind = 'MOC' | 'NON_MOC';
 type DepartmentName = string;
 type CheckpointType = 'DOCUMENT' | 'FIELD';
@@ -31,7 +31,9 @@ type PunchPayload = {
   owning_department: string;
   assigned_to_user_id?: number | null;
   due_date?: string | null;
+  progress_remarks?: string | null;
   closure_remarks?: string | null;
+  closure_evidence?: string | null;
   status?: 'OPEN' | 'IN_PROGRESS' | 'CLOSED';
   question_id?: number | null;
 };
@@ -164,6 +166,7 @@ export const TeamMemberDashboard: React.FC = () => {
     : initiatedTasks.filter((task) => task.workflow_state === 'COMPLETED_BY_DEPARTMENT' || task.workflow_state === 'COMPLETED_BY_TEAM' || task.workflow_state === 'COMPLETED');
   const pendingApproval = (data?.pending_review ?? emptyTasks).filter(monitorOnly);
   const approved = (data?.approved ?? emptyTasks).filter(monitorOnly);
+  const assignedPunchPoints = data?.assigned_punch_points ?? emptyTasks;
   const closed = initiatedTasks.filter((task) => task.workflow_state === 'CLOSED');
   const rejected = initiatedTasks.filter((task) => task.workflow_state === 'REJECTED');
   const initiatedInProgress = initiatedTasks.filter((task) => task.workflow_state === 'IN_PROGRESS' || task.status === 'In Progress');
@@ -189,8 +192,9 @@ export const TeamMemberDashboard: React.FC = () => {
       { label: 'To Do', value: String(todo.length), icon: ClipboardList, trend: 'Ready', color: 'text-on-surface-variant' },
       { label: 'In Progress', value: String(inProgress.length), icon: AlertCircle, trend: 'Active Work', color: 'text-primary' },
       { label: 'Completed', value: String(completed.length), icon: CheckCircle2, trend: 'Done', color: 'text-green-600' },
+      { label: 'Punch Points', value: String(assignedPunchPoints.length), icon: ClipboardList, trend: 'Assigned', color: 'text-tertiary' },
     ];
-  }, [approved, completed.length, inProgress.length, initiatedInProgress.length, isAssignedWorkspace, pendingApproval.length, todo.length, underPreparation.length]);
+  }, [approved, assignedPunchPoints.length, completed.length, inProgress.length, initiatedInProgress.length, isAssignedWorkspace, pendingApproval.length, todo.length, underPreparation.length]);
 
   if (isLoading) {
     return (
@@ -289,6 +293,8 @@ export const TeamMemberDashboard: React.FC = () => {
 
   const visibleTasks = activeTab === 'preparation'
     ? underPreparation
+    : activeTab === 'assigned_punch_points'
+      ? assignedPunchPoints
     : activeTab === 'todo'
       ? todo
       : activeTab === 'in_progress'
@@ -388,6 +394,7 @@ export const TeamMemberDashboard: React.FC = () => {
             {isAssignedWorkspace && <TabButton active={activeTab === 'todo'} onClick={() => setActiveTab('todo')} label={`To Do (${todo.length})`} />}
             <TabButton active={activeTab === 'in_progress'} onClick={() => setActiveTab('in_progress')} label={`In Progress (${isAssignedWorkspace ? inProgress.length : initiatedInProgress.length})`} />
             {isAssignedWorkspace && <TabButton active={activeTab === 'completed'} onClick={() => setActiveTab('completed')} label={`Completed (${completed.length})`} />}
+            {isAssignedWorkspace && <TabButton active={activeTab === 'assigned_punch_points'} onClick={() => setActiveTab('assigned_punch_points')} label={`Assigned Punch Points (${assignedPunchPoints.length})`} />}
             {!isAssignedWorkspace && <TabButton active={activeTab === 'completed'} onClick={() => setActiveTab('completed')} label={`Department Completed (${completed.length})`} />}
             {!isAssignedWorkspace && <TabButton active={activeTab === 'approval'} onClick={() => setActiveTab('approval')} label={`Pending Area Owner Approval (${pendingApproval.length})`} />}
             {!isAssignedWorkspace && <TabButton active={activeTab === 'approved'} onClick={() => setActiveTab('approved')} label={`Approved (${approved.filter((task) => task.workflow_state === 'APPROVED').length})`} />}
@@ -1632,6 +1639,11 @@ function userSearchText(employee: AdminUser): string {
   return `${employee.full_name} ${employee.email} ${employee.employee_id} ${employee.department ?? ''} ${employee.designation ?? ''}`.toLowerCase();
 }
 
+function isAllowedCheckpointAttachment(file: File): boolean {
+  const extension = file.name.split('.').pop()?.toLowerCase();
+  return Boolean(extension && ['pdf', 'jpg', 'jpeg', 'png'].includes(extension));
+}
+
 function initialsFor(name: string): string {
   return name.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
 }
@@ -1827,6 +1839,23 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, tab, index, onDetails }) => (
       <div className="flex-1">
         <p className="text-label-md font-bold text-on-surface">{task.id}</p>
         <p className="text-body-sm text-on-surface-variant mt-1">{task.pssr_title}</p>
+        {task.ownership === 'punch_point' && (
+          <div className="mt-3 rounded border border-outline-variant bg-surface-container-low p-3">
+            <p className="text-[10px] font-black uppercase text-primary">Assigned Punch Point</p>
+            <p className="mt-1 font-black text-on-surface">{task.punch_point_title}</p>
+            <p className="mt-1 text-body-sm text-on-surface-variant">{task.punch_point_description}</p>
+            {task.punch_checkpoint_question && <div className="mt-3 border-t border-outline-variant pt-3">
+              <p className="text-[10px] font-black uppercase text-outline">What Failed</p>
+              <p className="mt-1 font-bold text-on-surface">{task.punch_question_number ? `${task.punch_question_number}. ` : ''}{task.punch_checkpoint_question}</p>
+              <p className="mt-1 text-on-surface-variant">Original answer: <span className="font-black text-on-surface">{task.punch_original_answer ?? 'PENDING'}</span> | Remarks: <span className="font-bold text-on-surface">{task.punch_original_remarks ?? '-'}</span></p>
+              <p className="mt-1 text-on-surface-variant">Annexure: <span className="font-bold text-on-surface">{task.punch_annexure_name ?? '-'}</span></p>
+            </div>}
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-on-surface-variant">
+              <span>Priority: <span className="font-bold text-on-surface">{task.priority ?? '-'}</span></span>
+              <span>Raised By: <span className="font-bold text-on-surface">{task.raised_by?.full_name ?? '-'}</span></span>
+            </div>
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2 text-[11px] text-on-surface-variant">
           <span>Unit: <span className="font-bold text-on-surface">{task.unit}</span></span>
           {task.department && <span>Department: <span className="font-bold text-on-surface">{task.department}</span></span>}
@@ -1851,7 +1880,7 @@ const PSSRDetailsPanel: React.FC<{ pssrId: string; onClose: () => void }> = ({ p
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const detailQuery = usePSSRDetail(pssrId);
-  const [responses, setResponses] = useState<Record<number, { response: 'YES' | 'NO' | 'NA' | 'PENDING'; remarks: string; attachments: Array<Record<string, unknown>> }>>({});
+  const [responses, setResponses] = useState<Record<number, { response: 'YES' | 'NO' | 'NA' | 'PENDING'; remarks: string; attachments: CheckpointAttachmentPayload[] }>>({});
   const [uploads, setUploads] = useState<Record<number, File | undefined>>({});
   const [punchDrafts, setPunchDrafts] = useState<Record<number, Partial<PunchPayload>>>({});
   const [message, setMessage] = useState<string | null>(null);
@@ -1877,7 +1906,13 @@ const PSSRDetailsPanel: React.FC<{ pssrId: string; onClose: () => void }> = ({ p
     onError: (error: Error) => setMessage(error.message),
   });
   const respondMutation = useMutation({
-    mutationFn: ({ questionId, payload }: { questionId: number; payload: { response: 'YES' | 'NO' | 'NA' | 'PENDING'; remarks?: string | null; attachments?: Array<Record<string, unknown>> } }) => api.respondToPSSRQuestion(pssrId, questionId, payload),
+    mutationFn: async ({ questionId, payload, file }: { questionId: number; payload: { response: 'YES' | 'NO' | 'NA' | 'PENDING'; remarks?: string | null; attachments?: CheckpointAttachmentPayload[] }; file?: File }) => {
+      const attachment = file ? await api.uploadCheckpointAttachment(pssrId, questionId, file) : undefined;
+      return api.respondToPSSRQuestion(pssrId, questionId, {
+        ...payload,
+        attachments: attachment ? [attachment] : payload.attachments,
+      });
+    },
     onSuccess: () => {
       setMessage('Response saved.');
       invalidate();
@@ -1894,12 +1929,8 @@ const PSSRDetailsPanel: React.FC<{ pssrId: string; onClose: () => void }> = ({ p
           attachments: question.latest_response?.attachments ?? [],
         };
         const file = uploads[question.id];
-        const payload = {
-          ...draft,
-          attachments: file
-            ? [{ file_name: file.name, file_type: file.type, size: file.size, storage_path: `pending-browser-upload/${file.name}` }]
-            : draft.attachments,
-        };
+        const attachment = file ? await api.uploadCheckpointAttachment(pssrId, question.id, file) : undefined;
+        const payload = { ...draft, attachments: attachment ? [attachment] : draft.attachments };
         await api.respondToPSSRQuestion(pssrId, question.id, payload);
       }
     },
@@ -1912,7 +1943,7 @@ const PSSRDetailsPanel: React.FC<{ pssrId: string; onClose: () => void }> = ({ p
   const completeMutation = useMutation({
     mutationFn: () => api.completeMyPSSRSide(pssrId),
     onSuccess: () => {
-      setMessage('Your side is completed. You can still edit responses until Area Owner Approval routing.');
+      setMessage('Your side is completed. You can still edit responses until Area Owner approval.');
       invalidate();
     },
     onError: (error: Error) => setMessage(error.message),
@@ -1965,6 +1996,21 @@ const PSSRDetailsPanel: React.FC<{ pssrId: string; onClose: () => void }> = ({ p
   const selectedRoutingAreaOwner = areaOwnerDirectory.data?.records.find((owner) => String(owner.id) === areaOwnerId) ?? detail?.area_owner ?? null;
   const departmentProgress = useMemo(() => {
     if (!detail) return [];
+    if (detail.department_progress?.length) {
+      return detail.department_progress.map((row) => {
+        const assignedMembers = (detail.assignments ?? []).filter((assignment) => assignment.id === row.assignment_id);
+        return {
+          department: row.department,
+          totalQuestions: row.total_questions,
+          answered: row.answered_questions,
+          pending: row.pending_questions,
+          assignedMembers,
+          completed: row.completed,
+          applicable: row.applicable,
+          openPunchPoints: row.open_punch_points,
+        };
+      });
+    }
     const questions = detail.questions ?? [];
     const assignments = detail.assignments ?? [];
     const departments = Array.from(new Set([...assignments.map((item) => item.department), ...questions.map((item) => item.department_owner)]));
@@ -1977,9 +2023,8 @@ const PSSRDetailsPanel: React.FC<{ pssrId: string; onClose: () => void }> = ({ p
       const applicable = departmentQuestions.length > 0 || departmentPunchPoints.length > 0;
       const completed = departmentQuestions.every((question) => !question.mandatory || (question.latest_response && question.latest_response.response !== 'PENDING'))
         && assignedMembers.length > 0
-        && openPunchPoints === 0
         && applicable;
-      return { department, departmentQuestions, answered, pending: Math.max(departmentQuestions.length - answered, 0), assignedMembers, completed, applicable, openPunchPoints };
+      return { department, totalQuestions: departmentQuestions.length, answered, pending: Math.max(departmentQuestions.length - answered, 0), assignedMembers, completed, applicable, openPunchPoints };
     });
   }, [detail]);
   const annexureProgress = useMemo(() => {
@@ -2007,13 +2052,17 @@ const PSSRDetailsPanel: React.FC<{ pssrId: string; onClose: () => void }> = ({ p
       && (departmentMatches(department, assignment.department) || departmentMatches(assignment.department, department))
     ))
   );
-  const savePunchForQuestion = (
+  const draftPunchForQuestion = (
     question: NonNullable<PSSRWorkflowDetail['questions']>[number],
-    point: PunchPoint | undefined,
     patch: Partial<PunchPayload>,
   ) => {
-    const nextDraft = { ...(punchDrafts[question.id] ?? {}), ...patch };
-    setPunchDrafts((current) => ({ ...current, [question.id]: nextDraft }));
+    setPunchDrafts((current) => ({ ...current, [question.id]: { ...(current[question.id] ?? {}), ...patch } }));
+  };
+  const commitPunchForQuestion = (
+    question: NonNullable<PSSRWorkflowDetail['questions']>[number],
+    point: PunchPoint | undefined,
+  ) => {
+    const nextDraft = punchDrafts[question.id] ?? {};
     const payload: PunchPayload = {
       title: nextDraft.title ?? point?.title ?? punchTitleForQuestion(question),
       description: (nextDraft.description ?? point?.description ?? question.latest_response?.remarks ?? question.question_text).trim(),
@@ -2021,17 +2070,37 @@ const PSSRDetailsPanel: React.FC<{ pssrId: string; onClose: () => void }> = ({ p
       owning_department: nextDraft.owning_department ?? point?.owning_department ?? question.department_owner,
       assigned_to_user_id: nextDraft.assigned_to_user_id !== undefined ? nextDraft.assigned_to_user_id : (point?.assigned_to_user_id ?? null),
       due_date: nextDraft.due_date !== undefined ? nextDraft.due_date : (point?.due_date ?? null),
-      closure_remarks: nextDraft.closure_remarks !== undefined ? nextDraft.closure_remarks : (point?.remarks ?? null),
+      progress_remarks: nextDraft.progress_remarks !== undefined ? nextDraft.progress_remarks : (point?.progress_remarks ?? point?.remarks ?? null),
+      closure_remarks: nextDraft.closure_remarks !== undefined ? nextDraft.closure_remarks : (point?.closure_remarks ?? point?.remarks ?? null),
+      closure_evidence: nextDraft.closure_evidence !== undefined ? nextDraft.closure_evidence : (point?.closure_evidence ?? null),
       status: (nextDraft.status ?? point?.status ?? 'OPEN') as 'OPEN' | 'IN_PROGRESS' | 'CLOSED',
       question_id: question.annexure_question_id ?? question.id,
     };
-    if (!payload.assigned_to_user_id || !payload.due_date || !payload.description || payload.description.length < 3) {
+    if (!payload.description || payload.description.length < 3) {
+      setMessage('Punchlist remarks must be at least 3 characters.');
       return;
     }
     punchMutation.mutate({ pointId: point?.id, payload });
   };
+  const commitPunchPoint = (point: PunchPoint, patch: Partial<PunchPayload> = {}) => {
+    const payload: PunchPayload = {
+      title: point.title,
+      description: (point.description ?? point.title).trim(),
+      category: point.category as 'A' | 'B' | 'C',
+      owning_department: point.owning_department,
+      assigned_to_user_id: point.assigned_to_user_id ?? null,
+      due_date: point.due_date ?? null,
+      progress_remarks: point.progress_remarks ?? point.remarks ?? null,
+      closure_remarks: point.closure_remarks ?? point.remarks ?? null,
+      closure_evidence: point.closure_evidence ?? null,
+      status: point.status as 'OPEN' | 'IN_PROGRESS' | 'CLOSED',
+      question_id: point.question_id ?? null,
+      ...patch,
+    };
+    punchMutation.mutate({ pointId: point.id, payload });
+  };
 
-  const updateDraft = (questionId: number, patch: Partial<{ response: 'YES' | 'NO' | 'NA' | 'PENDING'; remarks: string; attachments: Array<Record<string, unknown>> }>) => {
+  const updateDraft = (questionId: number, patch: Partial<{ response: 'YES' | 'NO' | 'NA' | 'PENDING'; remarks: string; attachments: CheckpointAttachmentPayload[] }>) => {
     setResponses((current) => {
       const question = detail?.questions?.find((item) => item.id === questionId);
       const existing = current[questionId] ?? {
@@ -2057,7 +2126,7 @@ const PSSRDetailsPanel: React.FC<{ pssrId: string; onClose: () => void }> = ({ p
               <button
                 disabled={completeMutation.isPending}
                 onClick={() => {
-                  if (window.confirm('Mark your side complete? You can still edit responses until the PSSR is routed for Area Owner Approval.')) {
+                  if (window.confirm('Mark your side complete? You can still edit responses until Area Owner approval.')) {
                     completeMutation.mutate();
                   }
                 }}
@@ -2077,7 +2146,7 @@ const PSSRDetailsPanel: React.FC<{ pssrId: string; onClose: () => void }> = ({ p
                 Complete From Department Side
               </button>
             )}
-            {detail?.permissions?.is_initiator && detail.workflow_state !== 'CLOSED' && (
+            {detail?.permissions?.is_initiator && !['APPROVED', 'CLOSED'].includes(detail.workflow_state) && (
               <>
                 <button onClick={() => setShowEditWorkspace(true)} className="rounded border border-outline-variant px-3 py-2 text-label-sm font-black text-on-surface">Edit PSSR</button>
                 <button onClick={() => setShowReopenWorkspace(true)} className="rounded border border-outline-variant px-3 py-2 text-label-sm font-black text-on-surface">Reopen Work</button>
@@ -2094,6 +2163,7 @@ const PSSRDetailsPanel: React.FC<{ pssrId: string; onClose: () => void }> = ({ p
           <div className="flex flex-wrap gap-2 border-b border-outline-variant pb-3">
             <TabButton active={activeTab === 'details'} onClick={() => setActiveTab('details')} label="PSSR Details" />
             <TabButton active={activeTab === 'punchlist'} onClick={() => setActiveTab('punchlist')} label="Punchlist" />
+            <TabButton active={activeTab === 'assigned_punch_points'} onClick={() => setActiveTab('assigned_punch_points')} label="Assigned Punch Points" />
             <TabButton active={activeTab === 'history'} onClick={() => setActiveTab('history')} label="History" />
           </div>
           {message && <div className="rounded border border-outline-variant bg-surface-container-low px-4 py-3 text-body-sm font-bold text-on-surface">{message}</div>}
@@ -2131,8 +2201,8 @@ const PSSRDetailsPanel: React.FC<{ pssrId: string; onClose: () => void }> = ({ p
                           {row.assignedMembers.length ? row.assignedMembers.map((assignment) => <MemberIdentity key={assignment.id} user={assignment.user} fallbackId={assignment.user_id} />) : 'No assigned members'}
                         </span>
                       </span>
-                      <span className="text-on-surface-variant">{row.applicable ? `${row.answered}/${row.departmentQuestions.length} answered${row.openPunchPoints ? `, ${row.openPunchPoints} open punch` : ''}` : 'No checkpoints assigned'}</span>
-                      <span className={row.completed ? 'text-green-700 font-bold' : 'text-on-surface-variant'}>{row.completed ? 'Completed' : row.applicable ? `${row.pending + row.openPunchPoints} pending` : 'Not Applicable'}</span>
+                      <span className="text-on-surface-variant">{row.applicable ? `${row.answered}/${row.totalQuestions} answered${row.openPunchPoints ? `, ${row.openPunchPoints} open punch` : ''}` : 'No checkpoints assigned'}</span>
+                      <span className={row.completed ? 'text-green-700 font-bold' : 'text-on-surface-variant'}>{row.completed ? 'Completed' : row.applicable ? `${row.pending} checkpoint pending` : 'Not Applicable'}</span>
                     </div>
                   ))}
                   {departmentProgress.length === 0 && <p className="px-4 py-3 text-body-sm text-on-surface-variant">No department progress recorded.</p>}
@@ -2158,7 +2228,7 @@ const PSSRDetailsPanel: React.FC<{ pssrId: string; onClose: () => void }> = ({ p
                   <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div>
                       <p className="text-label-md font-black text-on-surface">Area Owner Approval Routing</p>
-                      <p className="text-body-sm text-on-surface-variant">Cannot send for approval until active departments are finalized and all punchlist items are closed.</p>
+                      <p className="text-body-sm text-on-surface-variant">Cannot send for approval until all active departments are leader-finalized and mandatory checkpoints are answered. Open punch points do not block routing.</p>
                     </div>
                     <button disabled className="inline-flex items-center gap-2 rounded border border-outline-variant px-4 py-2 text-label-sm font-black text-on-surface-variant opacity-60">
                       <Send className="h-4 w-4" />
@@ -2209,10 +2279,10 @@ const PSSRDetailsPanel: React.FC<{ pssrId: string; onClose: () => void }> = ({ p
                   {failedQuestions.map((question) => {
                     const point = punchForQuestion(question);
                     const draft = punchDrafts[question.id] ?? {};
-                    const assignedMembers = membersForDepartment(question.department_owner);
                     const selectedUserId = draft.assigned_to_user_id !== undefined ? draft.assigned_to_user_id : point?.assigned_to_user_id;
-                    const assignedMember = assignedMembers.find((assignment) => assignment.user_id === selectedUserId)?.user ?? point?.assigned_to_user ?? null;
                     const dueDateValue = toDateInputValue(draft.due_date ?? point?.due_date);
+                    const canUpdateThisPunch = canEditPunchlist || point?.assigned_to_user_id === user?.id;
+                    const assignedMember = point?.assigned_to_user ?? null;
                     return (
                       <div key={question.id} className="px-4 py-4 text-body-sm">
                         <div className="flex flex-col gap-3">
@@ -2226,11 +2296,11 @@ const PSSRDetailsPanel: React.FC<{ pssrId: string; onClose: () => void }> = ({ p
                               {point?.status ?? 'OPEN'}
                             </span>
                           </div>
-                          <div className="grid grid-cols-1 gap-2 md:grid-cols-[140px_1fr_170px_220px_130px]">
+                          <div className="grid grid-cols-1 gap-2 md:grid-cols-[140px_1fr_170px_240px_130px_auto]">
                             <select
                               disabled={!canEditPunchlist || punchMutation.isPending}
                               value={draft.category ?? point?.category ?? (question.mandatory ? 'A' : 'B')}
-                              onChange={(event) => savePunchForQuestion(question, point, { category: event.target.value as 'A' | 'B' | 'C' })}
+                              onChange={(event) => draftPunchForQuestion(question, { category: event.target.value as 'A' | 'B' | 'C' })}
                               className="h-10 rounded border border-outline-variant bg-transparent px-3 text-body-sm outline-none disabled:opacity-60"
                             >
                               <option value="A">Category A</option>
@@ -2238,10 +2308,9 @@ const PSSRDetailsPanel: React.FC<{ pssrId: string; onClose: () => void }> = ({ p
                               <option value="C">Category C</option>
                             </select>
                             <input
-                              disabled={!canEditPunchlist || punchMutation.isPending}
+                              disabled={!canUpdateThisPunch || punchMutation.isPending}
                               value={draft.description ?? point?.description ?? question.latest_response?.remarks ?? ''}
                               onChange={(event) => setPunchDrafts((current) => ({ ...current, [question.id]: { ...(current[question.id] ?? {}), description: event.target.value } }))}
-                              onBlur={(event) => savePunchForQuestion(question, point, { description: event.target.value.trim() })}
                               placeholder="Remarks"
                               className="h-10 rounded border border-outline-variant bg-transparent px-3 text-body-sm outline-none disabled:opacity-60"
                             />
@@ -2249,40 +2318,70 @@ const PSSRDetailsPanel: React.FC<{ pssrId: string; onClose: () => void }> = ({ p
                               disabled={!canEditPunchlist || punchMutation.isPending}
                               type="date"
                               value={dueDateValue}
-                              onChange={(event) => savePunchForQuestion(question, point, { due_date: event.target.value ? `${event.target.value}T00:00:00` : null })}
+                              onChange={(event) => draftPunchForQuestion(question, { due_date: event.target.value ? `${event.target.value}T00:00:00` : null })}
                               className="h-10 rounded border border-outline-variant bg-transparent px-3 text-body-sm outline-none disabled:opacity-60"
                             />
-                            <select
-                              disabled={!canEditPunchlist || punchMutation.isPending}
+                            <PunchAssigneeSelect
+                              department={question.department_owner}
                               value={selectedUserId ? String(selectedUserId) : ''}
-                              onChange={(event) => savePunchForQuestion(question, point, { assigned_to_user_id: event.target.value ? Number(event.target.value) : null })}
-                              className="h-10 rounded border border-outline-variant bg-transparent px-3 text-body-sm outline-none disabled:opacity-60"
-                            >
-                              <option value="">Assign member</option>
-                              {assignedMembers.map((assignment) => <option key={assignment.id} value={assignment.user_id}>{assignment.user?.full_name ?? `User ${assignment.user_id}`}</option>)}
-                            </select>
+                              currentUser={point?.assigned_to_user ?? undefined}
+                              disabled={!canEditPunchlist || punchMutation.isPending}
+                              onChange={(value) => draftPunchForQuestion(question, { assigned_to_user_id: value ? Number(value) : null })}
+                            />
                             <select
-                              disabled={!canEditPunchlist || punchMutation.isPending || !point}
+                              disabled={!canUpdateThisPunch || punchMutation.isPending || !point}
                               value={draft.status ?? point?.status ?? 'OPEN'}
-                              onChange={(event) => savePunchForQuestion(question, point, { status: event.target.value as 'OPEN' | 'IN_PROGRESS' | 'CLOSED' })}
+                              onChange={(event) => draftPunchForQuestion(question, { status: event.target.value as 'OPEN' | 'IN_PROGRESS' | 'CLOSED' })}
                               className="h-10 rounded border border-outline-variant bg-transparent px-3 text-body-sm font-bold outline-none disabled:opacity-60"
                             >
                               <option value="OPEN">Open</option>
                               <option value="IN_PROGRESS">In Progress</option>
                               <option value="CLOSED">Closed</option>
                             </select>
+                            <button
+                              disabled={!canUpdateThisPunch || punchMutation.isPending}
+                              onClick={() => commitPunchForQuestion(question, point)}
+                              className="inline-flex h-10 items-center justify-center gap-2 rounded bg-primary px-3 text-label-sm font-black text-on-primary disabled:opacity-50"
+                            >
+                              <Save className="h-4 w-4" />
+                              {point?.assigned_to_user_id ? 'Save' : 'Assign'}
+                            </button>
                           </div>
                           <div className="grid grid-cols-1 gap-2 text-label-sm text-on-surface-variant md:grid-cols-4">
                             <span>Assigned: <span className="font-bold text-on-surface">{assignedMember?.full_name ?? 'Unassigned'}</span></span>
                             <span>Email: <span className="font-bold text-on-surface">{assignedMember?.email ?? '-'}</span></span>
                             <span>Due: <span className="font-bold text-on-surface">{dueDateValue || '-'}</span></span>
                             <span>Department: <span className="font-bold text-on-surface">{question.department_owner}</span></span>
+                            <span>Assigned By: <span className="font-bold text-on-surface">{point?.assigned_by?.full_name ?? '-'}</span></span>
                           </div>
+                          {point && <div className="mt-3 space-y-2 border-t border-outline-variant pt-3">
+                            <p className="text-[10px] font-black uppercase text-outline">Closure Evidence</p>
+                            {(point.evidence_attachments ?? []).map((evidence) => <PunchEvidenceRow key={evidence.id} evidence={evidence} onError={setMessage} />)}
+                            {(point.evidence_attachments ?? []).length === 0 && <p className="text-label-sm text-on-surface-variant">No closure evidence uploaded.</p>}
+                          </div>}
                         </div>
                       </div>
                     );
                   })}
                   {failedQuestions.length === 0 && <p className="px-4 py-3 text-body-sm text-on-surface-variant">No failed checkpoints recorded.</p>}
+                </div>
+              </section>}
+
+              {activeTab === 'assigned_punch_points' && <section className="border border-outline-variant rounded overflow-hidden">
+                <div className="bg-surface-container-low px-4 py-3 text-label-md font-black uppercase text-on-surface">Assigned Punch Points</div>
+                <div className="divide-y divide-outline-variant">
+                  {(detail.punch_points ?? []).filter((point) => point.assigned_to_user_id === user?.id).map((point) => (
+                    <AssignedPunchPointRow
+                      key={point.id}
+                      point={point}
+                      pssrId={detail.pssr_id}
+                      canEditAssignment={canEditPunchlist}
+                      canUpdate={canEditPunchlist || point.assigned_to_user_id === user?.id}
+                      busy={punchMutation.isPending}
+                      onSave={commitPunchPoint}
+                    />
+                  ))}
+                  {(detail.punch_points ?? []).filter((point) => point.assigned_to_user_id === user?.id).length === 0 && <p className="px-4 py-3 text-body-sm text-on-surface-variant">No punch points assigned to you for this PSSR.</p>}
                 </div>
               </section>}
 
@@ -2319,24 +2418,36 @@ const PSSRDetailsPanel: React.FC<{ pssrId: string; onClose: () => void }> = ({ p
                           <input value={draft.remarks} onChange={(event) => updateDraft(question.id, { remarks: event.target.value })} placeholder="Remarks or evidence reference" className="h-10 rounded border border-outline-variant bg-transparent px-3 text-body-sm outline-none" />
                           <label className="flex h-10 cursor-pointer items-center justify-center rounded border border-outline-variant bg-surface-container-lowest px-3 text-[11px] font-bold text-on-surface hover:bg-surface-container-low transition-colors">
                             <span>Add Attachment</span>
-                            <input type="file" accept=".jpg,.jpeg,.pdf" onChange={(event) => setUploads((current) => ({ ...current, [question.id]: event.target.files?.[0] }))} className="hidden" />
+                            <input
+                              type="file"
+                              accept=".pdf,.jpg,.jpeg,.png"
+                              onChange={(event) => {
+                                const file = event.target.files?.[0];
+                                if (file && !isAllowedCheckpointAttachment(file)) {
+                                  setMessage('Only PDF, JPG, JPEG, and PNG attachments are allowed.');
+                                  event.target.value = '';
+                                  return;
+                                }
+                                setUploads((current) => ({ ...current, [question.id]: file }));
+                              }}
+                              className="hidden"
+                            />
                           </label>
                           <button disabled={respondMutation.isPending} onClick={() => {
                             const file = uploads[question.id];
                             respondMutation.mutate({ questionId: question.id, payload: {
                               ...draft,
-                              attachments: file
-                                ? [{ file_name: file.name, file_type: file.type, size: file.size, storage_path: `pending-browser-upload/${file.name}` }]
-                                : draft.attachments,
-                            } });
+                              attachments: draft.attachments,
+                            }, file });
                           }} className="h-10 rounded bg-primary px-3 text-label-sm font-black text-on-primary disabled:opacity-50">Save</button>
                         </div>
                       ) : (
                         <p className="mt-3 text-label-sm font-bold text-on-surface-variant">{question.latest_response ? `${question.latest_response.response} - ${question.latest_response.remarks ?? 'No remarks'}` : 'Read-only for your role or department.'}</p>
                       )}
+                      <CheckpointAuditBlock pssrId={pssrId} response={question.latest_response} />
                       {(draft.attachments?.length > 0 || uploads[question.id]) && (
                         <div className="mt-2 text-[11px] text-on-surface-variant font-medium">
-                          {uploads[question.id] ? `Pending upload: ${uploads[question.id]?.name}` : `Attached: ${(draft.attachments[0] as any)?.file_name ?? 'Document'}`}
+                          {uploads[question.id] ? `Pending upload: ${uploads[question.id]?.name}` : `Attached: ${draft.attachments[0]?.file_name ?? 'Document'}`}
                         </div>
                       )}
                     </div>
@@ -2352,7 +2463,12 @@ const PSSRDetailsPanel: React.FC<{ pssrId: string; onClose: () => void }> = ({ p
                       <p className="font-black text-on-surface">{historyActionLabel(row.action)}</p>
                       <p className="text-on-surface-variant">{row.actor?.full_name ?? (row.actor_user_id ? `User ${row.actor_user_id}` : 'System')}</p>
                       <p className="text-on-surface-variant">{row.department ?? String(row.metadata?.department ?? '-')}</p>
-                      <p className="text-on-surface-variant">{row.summary}</p>
+                      <p className="text-on-surface-variant">
+                        {row.summary}
+                        {row.action === 'PUNCH_EVIDENCE_UPLOADED' && row.metadata?.evidence_id != null && row.metadata?.punch_point_id != null && (
+                          <button onClick={() => void api.viewPunchEvidence(detail.pssr_id, Number(row.metadata.punch_point_id), Number(row.metadata.evidence_id))} className="ml-2 font-black text-primary hover:underline">View Evidence</button>
+                        )}
+                      </p>
                       <p className="text-[10px] font-bold uppercase text-outline">{new Date(row.created_at).toLocaleString()}</p>
                     </div>
                   ))}
@@ -2576,7 +2692,7 @@ const PSSREditWorkspace: React.FC<{ pssr: PSSRWorkflowDetail; onClose: () => voi
               annexureId: id,
               annexureQuestionId: q.id,
               questionText: q.question_text,
-              description: q.question_description ?? '',
+              description: q.help_text ?? q.expected_evidence ?? q.guidance_notes ?? '',
               checkpointType: q.question_type ?? 'FIELD',
               departmentOwner: q.department_owner,
               assignedUserId: assignments.find((a) => a.department === q.department_owner)?.userId ?? '',
@@ -2683,7 +2799,6 @@ const PSSREditWorkspace: React.FC<{ pssr: PSSRWorkflowDetail; onClose: () => voi
                     <EditAssignmentRow
                       assignment={assignment}
                       index={index}
-                      search={search}
                       fixed={index < PSSR_DEPARTMENTS.length}
                       onChange={updateAssignment}
                       onRemove={() => setAssignments((current) => current.filter((_, idx) => idx !== index))}
@@ -2759,29 +2874,220 @@ const ReopenWorkDialog: React.FC<{ pssr: PSSRWorkflowDetail; onClose: () => void
   );
 };
 
+const PunchAssigneeSelect: React.FC<{
+  department: string;
+  value: string;
+  currentUser?: MemberDisplayUser | null;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}> = ({ department, value, currentUser, disabled, onChange }) => {
+  const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 250);
+  const usersQuery = useTeamDirectory({
+    page: 1,
+    limit: 50,
+    department,
+    search: debouncedSearch.trim() || undefined,
+    role: 'TEAM_MEMBER',
+  });
+  const users = useMemo(() => {
+    const byId = new Map<string, MemberDisplayUser>();
+    if (currentUser) byId.set(String(currentUser.id), currentUser);
+    usersQuery.data?.records.forEach((item) => byId.set(String(item.id), item));
+    return Array.from(byId.values());
+  }, [currentUser, usersQuery.data?.records]);
+
+  return (
+    <div className="grid grid-cols-1 gap-1">
+      <input
+        disabled={disabled}
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+        placeholder="Search owner"
+        className="h-8 rounded border border-outline-variant bg-transparent px-2 text-label-sm outline-none disabled:opacity-60"
+      />
+      <select
+        disabled={disabled || usersQuery.isLoading}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-10 rounded border border-outline-variant bg-transparent px-3 text-body-sm outline-none disabled:opacity-60"
+      >
+        <option value="">Unassigned</option>
+        {users.map((member) => <option key={member.id} value={member.id}>{memberOptionLabel(member)}</option>)}
+      </select>
+    </div>
+  );
+};
+
+const AssignedPunchPointRow: React.FC<{
+  point: PunchPoint;
+  pssrId: string;
+  canEditAssignment: boolean;
+  canUpdate: boolean;
+  busy?: boolean;
+  onSave: (point: PunchPoint, patch?: Partial<PunchPayload>) => void;
+}> = ({ point, pssrId, canEditAssignment, canUpdate, busy, onSave }) => {
+  const [assigneeId, setAssigneeId] = useState(point.assigned_to_user_id ? String(point.assigned_to_user_id) : '');
+  const [category, setCategory] = useState(point.category as 'A' | 'B' | 'C');
+  const [dueDate, setDueDate] = useState(toDateInputValue(point.due_date));
+  const [status, setStatus] = useState(point.status as 'OPEN' | 'IN_PROGRESS' | 'CLOSED');
+  const [progressRemarks, setProgressRemarks] = useState(point.progress_remarks ?? point.remarks ?? '');
+  const [closureRemarks, setClosureRemarks] = useState(point.closure_remarks ?? '');
+  const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
+  const [message, setMessage] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const evidenceMutation = useMutation({
+    mutationFn: async () => Promise.all(evidenceFiles.map((file) => api.uploadPunchEvidence(pssrId, point.id, file))),
+    onSuccess: () => {
+      setEvidenceFiles([]);
+      setMessage('Evidence uploaded.');
+      void queryClient.invalidateQueries({ queryKey: ['pssr-detail', pssrId] });
+      void queryClient.invalidateQueries({ queryKey: ['team-dashboard'] });
+    },
+    onError: (error: Error) => setMessage(error.message),
+  });
+
+  useEffect(() => {
+    setAssigneeId(point.assigned_to_user_id ? String(point.assigned_to_user_id) : '');
+    setCategory(point.category as 'A' | 'B' | 'C');
+    setDueDate(toDateInputValue(point.due_date));
+    setStatus(point.status as 'OPEN' | 'IN_PROGRESS' | 'CLOSED');
+    setProgressRemarks(point.progress_remarks ?? point.remarks ?? '');
+    setClosureRemarks(point.closure_remarks ?? '');
+  }, [point]);
+
+  return (
+    <div className="space-y-4 px-4 py-4 text-body-sm">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(220px,1fr)_130px_170px_minmax(220px,280px)_auto] lg:items-end">
+        <div>
+          <p className="text-[10px] font-black uppercase text-primary">Punch Point</p>
+          <p className="mt-1 font-black text-on-surface">{point.title}</p>
+          <p className="mt-1 text-on-surface-variant">{point.description ?? '-'}</p>
+        </div>
+        <label className="block">
+          <span className="text-[10px] font-black uppercase text-outline">Category</span>
+          <select disabled={!canEditAssignment || busy} value={category} onChange={(event) => setCategory(event.target.value as 'A' | 'B' | 'C')} className="mt-1 h-10 w-full rounded border border-outline-variant bg-transparent px-3 text-body-sm disabled:opacity-60">
+            <option value="A">A</option>
+            <option value="B">B</option>
+            <option value="C">C</option>
+          </select>
+        </label>
+        <label className="block">
+          <span className="text-[10px] font-black uppercase text-outline">Due Date</span>
+          <input disabled={!canEditAssignment || busy} type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} className="mt-1 h-10 w-full rounded border border-outline-variant bg-transparent px-3 text-body-sm disabled:opacity-60" />
+        </label>
+        <div>
+          <p className="text-[10px] font-black uppercase text-outline">Assign To</p>
+          {canEditAssignment ? (
+            <PunchAssigneeSelect department={point.owning_department} value={assigneeId} currentUser={point.assigned_to_user ?? undefined} disabled={busy} onChange={setAssigneeId} />
+          ) : (
+            <p className="mt-1 h-10 rounded border border-outline-variant px-3 py-2 font-bold text-on-surface">{point.assigned_to_user?.full_name ?? 'Unassigned'}</p>
+          )}
+        </div>
+        {canEditAssignment && (
+          <button
+            disabled={busy}
+            onClick={() => onSave(point, {
+              assigned_to_user_id: assigneeId ? Number(assigneeId) : null,
+              category,
+              due_date: dueDate ? `${dueDate}T00:00:00` : null,
+            })}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded bg-primary px-3 text-label-sm font-black text-on-primary disabled:opacity-50"
+          >
+            <Save className="h-4 w-4" />
+            Assign Punch Point
+          </button>
+        )}
+      </div>
+      <div className="rounded border border-outline-variant bg-surface-container-low p-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_160px_180px]">
+          <div>
+            <p className="text-[10px] font-black uppercase text-outline">Original Checkpoint</p>
+            <p className="mt-1 font-black text-on-surface">{point.question_number ? `${point.question_number}. ` : ''}{point.checkpoint_question ?? 'No linked checkpoint'}</p>
+            {point.checkpoint_description && <p className="mt-1 text-on-surface-variant">{point.checkpoint_description}</p>}
+          </div>
+          <ReadOnlyValue label="Original Answer" value={point.original_answer ?? 'PENDING'} />
+          <ReadOnlyValue label="Original Remarks" value={point.original_remarks ?? '-'} />
+        </div>
+        <div className="mt-3 grid grid-cols-1 gap-2 text-label-sm text-on-surface-variant md:grid-cols-4">
+          <span>Department: <span className="font-bold text-on-surface">{point.department ?? point.owning_department}</span></span>
+          <span>Annexure: <span className="font-bold text-on-surface">{point.annexure_name ?? '-'}</span></span>
+          <span>Raised By: <span className="font-bold text-on-surface">{point.raised_by?.full_name ?? '-'}</span></span>
+          <span>Assigned By: <span className="font-bold text-on-surface">{point.assigned_by?.full_name ?? '-'} {point.assigned_by?.role ? `(${point.assigned_by.role})` : ''}</span></span>
+        </div>
+        <div className="mt-3 space-y-2">
+          <p className="text-[10px] font-black uppercase text-outline">Existing Checkpoint Attachments</p>
+          {(point.checkpoint_attachments ?? []).map((attachment) => <AttachmentRow key={attachment.id} pssrId={pssrId} attachment={attachment} onError={setMessage} />)}
+          {(point.checkpoint_attachments ?? []).length === 0 && <p className="text-on-surface-variant">No checkpoint attachment uploaded.</p>}
+        </div>
+      </div>
+      {!canEditAssignment && canUpdate && (
+        <div className="grid grid-cols-1 gap-2 border-t border-outline-variant pt-3 md:grid-cols-[150px_1fr_1fr_auto]">
+          <select disabled={busy} value={status} onChange={(event) => setStatus(event.target.value as 'OPEN' | 'IN_PROGRESS' | 'CLOSED')} className="h-9 rounded border border-outline-variant bg-transparent px-2 text-body-sm disabled:opacity-60">
+            <option value="OPEN">Open</option>
+            <option value="IN_PROGRESS">In Progress</option>
+            <option value="CLOSED">Closed</option>
+          </select>
+          <input disabled={busy} value={progressRemarks} onChange={(event) => setProgressRemarks(event.target.value)} placeholder="Progress remarks" className="h-9 rounded border border-outline-variant bg-transparent px-2 text-body-sm disabled:opacity-60" />
+          <input disabled={busy} value={closureRemarks} onChange={(event) => setClosureRemarks(event.target.value)} placeholder="Closure remarks" className="h-9 rounded border border-outline-variant bg-transparent px-2 text-body-sm disabled:opacity-60" />
+          <button
+            disabled={busy}
+            onClick={() => onSave(point, {
+              status,
+              progress_remarks: progressRemarks.trim() || null,
+              closure_remarks: closureRemarks.trim() || null,
+            })}
+            className="inline-flex h-9 items-center justify-center gap-2 rounded border border-outline-variant px-3 text-label-sm font-black text-on-surface disabled:opacity-50"
+          >
+            <Save className="h-4 w-4" />
+            Save Progress
+          </button>
+        </div>
+      )}
+      <div className="space-y-2 border-t border-outline-variant pt-3">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center">
+          {canUpdate && <label className="inline-flex h-9 cursor-pointer items-center justify-center rounded border border-outline-variant px-3 text-label-sm font-black text-on-surface">
+            Add Evidence
+            <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.txt,.csv" className="hidden" onChange={(event) => setEvidenceFiles(Array.from(event.target.files ?? []))} />
+          </label>}
+          {evidenceFiles.length > 0 && <span className="text-on-surface-variant">{evidenceFiles.length} file(s) ready</span>}
+          {evidenceFiles.length > 0 && <button disabled={evidenceMutation.isPending} onClick={() => evidenceMutation.mutate()} className="h-9 rounded bg-primary px-3 text-label-sm font-black text-on-primary disabled:opacity-50">Upload Evidence</button>}
+        </div>
+        {(point.evidence_attachments ?? []).map((evidence) => <PunchEvidenceRow key={evidence.id} evidence={evidence} onError={setMessage} />)}
+        {(point.evidence_attachments ?? []).length === 0 && <p className="text-on-surface-variant">No closure evidence uploaded yet.</p>}
+        {message && <p className="font-bold text-primary">{message}</p>}
+      </div>
+    </div>
+  );
+};
+
 const EditAssignmentRow: React.FC<{
   assignment: EditAssignmentDraft;
   index: number;
-  search: string;
   fixed: boolean;
   onChange: (index: number, patch: Partial<EditAssignmentDraft>) => void;
   onRemove: () => void;
-}> = ({ assignment, index, search, fixed, onChange, onRemove }) => {
+}> = ({ assignment, index, fixed, onChange, onRemove }) => {
+  const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 250);
   const usersQuery = useTeamDirectory({
     page: 1,
     limit: 50,
     department: assignment.department || undefined,
-    search: search.trim() || undefined,
+    search: debouncedSearch.trim() || undefined,
     role: 'TEAM_MEMBER',
   });
   const users = usersQuery.data?.records ?? [];
   const selectedUser = users.find((user) => String(user.id) === assignment.userId);
   return (
     <div className={`grid min-w-[960px] grid-cols-[minmax(360px,1fr)_120px_170px_280px] items-center gap-2 px-3 pb-2 ${assignment.userId ? '' : 'text-on-surface-variant'}`}>
-      <select disabled={!assignment.department || usersQuery.isLoading} value={assignment.userId} onChange={(event) => onChange(index, { userId: event.target.value })} className={`h-9 min-w-0 rounded border border-outline-variant px-3 text-body-sm outline-none disabled:opacity-60 ${assignment.userId ? 'bg-transparent text-on-surface' : 'bg-surface-container-low text-on-surface-variant'}`}>
-        <option value="">{assignment.department ? 'Search and assign member' : 'Select department first'}</option>
-        {users.map((user) => <option key={user.id} value={user.id}>{memberOptionLabel(user)}</option>)}
-      </select>
+      <div className="space-y-1">
+        <input disabled={!assignment.department} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, code, department, designation" className="h-9 w-full rounded border border-outline-variant bg-transparent px-3 text-body-sm outline-none disabled:opacity-60" />
+        <select disabled={!assignment.department || usersQuery.isLoading} value={assignment.userId} onChange={(event) => onChange(index, { userId: event.target.value })} className={`h-9 min-w-0 rounded border border-outline-variant px-3 text-body-sm outline-none disabled:opacity-60 ${assignment.userId ? 'bg-transparent text-on-surface' : 'bg-surface-container-low text-on-surface-variant'}`}>
+          <option value="">{assignment.department ? 'Select filtered member' : 'Select department first'}</option>
+          {users.map((user) => <option key={user.id} value={user.id}>{memberOptionLabel(user)}</option>)}
+        </select>
+      </div>
       <span className="truncate text-body-sm font-bold">{selectedUser?.employee_id ?? '-'}</span>
       <span className="truncate text-body-sm font-bold">{selectedUser?.designation ?? '-'}</span>
       <div className="flex items-center gap-2">
@@ -2796,6 +3102,94 @@ const ReadOnlyValue: React.FC<{ label: string; value: string }> = ({ label, valu
   <div className="rounded border border-outline-variant bg-surface-container-low p-3">
     <p className="text-[10px] font-black uppercase text-outline">{label}</p>
     <p className="mt-1 text-body-sm font-bold text-on-surface break-words">{value || 'Not recorded'}</p>
+  </div>
+);
+
+const CheckpointAuditBlock: React.FC<{
+  pssrId: string;
+  response?: NonNullable<NonNullable<PSSRWorkflowDetail['questions']>[number]['latest_response']> | null;
+}> = ({ pssrId, response }) => {
+  const [message, setMessage] = useState<string | null>(null);
+  if (!response) {
+    return (
+      <div className="mt-3 rounded border border-outline-variant bg-surface-container-low px-3 py-2 text-label-sm font-bold text-on-surface-variant">
+        No answer recorded yet.
+      </div>
+    );
+  }
+  const attachments = response.attachments ?? [];
+  return (
+    <div className="mt-3 rounded border border-outline-variant bg-surface-container-low p-3 text-label-sm">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_120px_170px_1fr]">
+        <div>
+          <p className="text-[10px] font-black uppercase text-outline">Answered By</p>
+          <p className="font-black text-on-surface">{response.responded_by?.full_name ?? 'Not recorded'}</p>
+          <p className="font-bold text-on-surface-variant">{response.responded_by?.employee_id ?? '-'}</p>
+          <p className="font-bold text-on-surface-variant">{response.responded_by?.department ?? response.responded_by_department ?? '-'}</p>
+        </div>
+        <div>
+          <p className="text-[10px] font-black uppercase text-outline">Answer</p>
+          <p className="font-black text-on-surface">{response.response}</p>
+        </div>
+        <div>
+          <p className="text-[10px] font-black uppercase text-outline">Last Updated</p>
+          <p className="font-bold text-on-surface">{response.updated_at || response.responded_at ? new Date(response.updated_at ?? response.responded_at ?? '').toLocaleString() : '-'}</p>
+        </div>
+        <div>
+          <p className="text-[10px] font-black uppercase text-outline">Remarks</p>
+          <p className="font-bold text-on-surface-variant">{response.remarks || '-'}</p>
+        </div>
+      </div>
+      <div className="mt-3 space-y-2">
+        {attachments.map((attachment) => <AttachmentRow key={attachment.id} pssrId={pssrId} attachment={attachment} onError={setMessage} />)}
+        {attachments.length === 0 && <p className="text-on-surface-variant">No attachment uploaded.</p>}
+        {message && <p className="font-bold text-error">{message}</p>}
+      </div>
+    </div>
+  );
+};
+
+const AttachmentRow: React.FC<{ pssrId: string; attachment: CheckpointAttachment; onError: (message: string) => void }> = ({ pssrId, attachment, onError }) => (
+  <div className="flex flex-col gap-2 rounded border border-outline-variant bg-surface-container-lowest p-3 md:flex-row md:items-center md:justify-between">
+    <div className="min-w-0">
+      <p className="truncate font-black text-on-surface">{attachment.file_name}</p>
+      <p className="text-on-surface-variant">
+        Uploaded by {attachment.uploaded_by?.full_name ?? 'Unknown'} | {attachment.uploaded_by?.employee_id ?? attachment.uploader_employee_code ?? '-'} | {attachment.uploaded_by?.department ?? '-'}
+      </p>
+      <p className="text-on-surface-variant">Upload Date: {attachment.uploaded_at ? new Date(attachment.uploaded_at).toLocaleString() : '-'}</p>
+    </div>
+    <div className="flex shrink-0 gap-2">
+      <button
+        type="button"
+        onClick={() => void api.downloadCheckpointAttachment(pssrId, attachment.id, attachment.file_name).catch((error: Error) => onError(error.message))}
+        className="rounded border border-outline-variant px-3 py-2 text-[11px] font-black text-primary hover:bg-primary/5"
+      >
+        Download
+      </button>
+      <button
+        type="button"
+        onClick={() => void api.viewCheckpointAttachment(pssrId, attachment.id).catch((error: Error) => onError(error.message))}
+        className="rounded border border-outline-variant px-3 py-2 text-[11px] font-black text-on-surface hover:bg-surface-container-low"
+      >
+        View
+      </button>
+    </div>
+  </div>
+);
+
+const PunchEvidenceRow: React.FC<{
+  evidence: NonNullable<PunchPoint['evidence_attachments']>[number];
+  onError: (message: string) => void;
+}> = ({ evidence, onError }) => (
+  <div className="flex flex-col gap-2 rounded border border-outline-variant bg-surface-container-lowest p-3 md:flex-row md:items-center md:justify-between">
+    <div className="min-w-0">
+      <p className="truncate font-black text-on-surface">{evidence.file_name}</p>
+      <p className="text-on-surface-variant">Uploaded by {evidence.uploaded_by?.full_name ?? 'Unknown'} | {evidence.uploaded_at ? new Date(evidence.uploaded_at).toLocaleString() : '-'}</p>
+    </div>
+    <div className="flex shrink-0 gap-2">
+      <button type="button" onClick={() => void api.viewPunchEvidence(evidence.pssr_id, evidence.punch_point_id, evidence.id).catch((error: Error) => onError(error.message))} className="rounded border border-outline-variant px-3 py-2 text-[11px] font-black text-on-surface">View</button>
+      <button type="button" onClick={() => void api.downloadPunchEvidence(evidence.pssr_id, evidence.punch_point_id, evidence.id, evidence.file_name).catch((error: Error) => onError(error.message))} className="rounded border border-outline-variant px-3 py-2 text-[11px] font-black text-primary">Download</button>
+    </div>
   </div>
 );
 

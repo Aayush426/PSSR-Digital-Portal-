@@ -2,7 +2,8 @@
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, File, Query, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user, require_admin, require_pssr_initiator
@@ -270,6 +271,58 @@ def respond_to_pssr_question(
     )
 
 
+@router.post("/{pssr_id}/questions/{question_id}/attachment", summary="Upload checkpoint attachment")
+def upload_checkpoint_attachment(
+    pssr_id: str,
+    question_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Upload or replace the attachment for one checkpoint response."""
+
+    return success_response(
+        data=PSSRWorkflowService.upload_checkpoint_attachment(db, pssr_id, question_id, file, current_user),
+        message="Checkpoint attachment uploaded successfully.",
+    )
+
+
+@router.get("/{pssr_id}/attachments/{attachment_id}/download", summary="Download checkpoint attachment")
+def download_checkpoint_attachment(
+    pssr_id: str,
+    attachment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Allow every PSSR participant to download checkpoint attachments."""
+
+    attachment = PSSRWorkflowService.get_checkpoint_attachment(db, pssr_id, attachment_id, current_user)
+    return FileResponse(
+        attachment.storage_path,
+        media_type=attachment.content_type,
+        filename=attachment.file_name,
+        content_disposition_type="attachment",
+    )
+
+
+@router.get("/{pssr_id}/attachments/{attachment_id}/view", summary="View checkpoint attachment")
+def view_checkpoint_attachment(
+    pssr_id: str,
+    attachment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Allow every PSSR participant to view checkpoint attachments inline."""
+
+    attachment = PSSRWorkflowService.get_checkpoint_attachment(db, pssr_id, attachment_id, current_user)
+    return FileResponse(
+        attachment.storage_path,
+        media_type=attachment.content_type,
+        filename=attachment.file_name,
+        content_disposition_type="inline",
+    )
+
+
 @router.post("/{pssr_id}/complete-my-side", summary="Complete assigned PSSR work for current user")
 def complete_my_side(
     pssr_id: str,
@@ -344,6 +397,44 @@ def update_punch_point(
         data=PSSRWorkflowService.update_punch_point(db, pssr_id, punch_point_id, payload, current_user),
         message="Punchlist item updated successfully.",
     )
+
+
+@router.post("/{pssr_id}/punch-points/{punch_point_id}/evidence", summary="Upload punch point closure evidence")
+def upload_punch_point_evidence(
+    pssr_id: str,
+    punch_point_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return success_response(
+        data=PSSRWorkflowService.upload_punch_evidence(db, pssr_id, punch_point_id, file, current_user),
+        message="Punch point evidence uploaded successfully.",
+    )
+
+
+@router.get("/{pssr_id}/punch-points/{punch_point_id}/evidence/{evidence_id}/download", summary="Download punch point evidence")
+def download_punch_point_evidence(
+    pssr_id: str,
+    punch_point_id: int,
+    evidence_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    evidence = PSSRWorkflowService.get_punch_evidence(db, pssr_id, punch_point_id, evidence_id, current_user)
+    return FileResponse(evidence.storage_path, media_type=evidence.content_type, filename=evidence.file_name, content_disposition_type="attachment")
+
+
+@router.get("/{pssr_id}/punch-points/{punch_point_id}/evidence/{evidence_id}/view", summary="View punch point evidence")
+def view_punch_point_evidence(
+    pssr_id: str,
+    punch_point_id: int,
+    evidence_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    evidence = PSSRWorkflowService.get_punch_evidence(db, pssr_id, punch_point_id, evidence_id, current_user)
+    return FileResponse(evidence.storage_path, media_type=evidence.content_type, filename=evidence.file_name, content_disposition_type="inline")
 
 
 @router.post("/{pssr_id}/transition", summary="Transition PSSR workflow state")

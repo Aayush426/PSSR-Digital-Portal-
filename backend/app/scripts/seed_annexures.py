@@ -405,6 +405,7 @@ def seed_sample_workflow(db, team_member: User | None, area_owner: User | None, 
                     status="OPEN",
                     owning_department=question.checked_by_department,
                     assigned_to_user_id=team_member.id,
+                    assigned_by_user_id=area_owner.id if area_owner else (admin.id if admin else None),
                     raised_by_user_id=team_member.id,
                     due_date=datetime.utcnow() + timedelta(days=2),
                 )

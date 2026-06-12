@@ -1,9 +1,11 @@
 """TEAM_MEMBER dashboard composition service."""
 
+from sqlalchemy import or_
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
 from app.core.logging import get_logger
+from app.models.annexures import Annexure, AnnexurePunchPoint
 from app.models.pssr import PSSRActivityLog
 from app.models.pssr_task import PSSRTask
 from app.models.pssr_workflow import PSSRQuestion, PSSRQuestionResponse, PSSRTeamMemberAssignment, PSSRWorkflow
@@ -57,6 +59,7 @@ class TeamService:
             PermissionCode.INITIATE_PSSR,
         )
         live_tasks = TeamService._live_assignment_tasks(db, current_user)
+        assigned_punch_points = TeamService._assigned_punch_point_tasks(db, current_user)
         initiator_tasks = TeamService._initiator_workflow_tasks(db, current_user) if is_initiator else []
         task_query = db.query(PSSRTask)
         activity_query = db.query(PSSRActivityLog)
@@ -119,6 +122,7 @@ class TeamService:
             completed=completed,
             pending_review=pending_review,
             approved=approved,
+            assigned_punch_points=assigned_punch_points,
             activity=activity,
             stats=TeamDashboardStats(
                 draft_count=len(under_preparation),
@@ -309,6 +313,65 @@ class TeamService:
         return TeamService._dedupe_tasks(tasks)
 
     @staticmethod
+    def _assigned_punch_point_tasks(db: Session, current_user: User) -> list[TeamDashboardTask]:
+        role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+        query = db.query(AnnexurePunchPoint, PSSRWorkflow).join(
+            PSSRWorkflow,
+            PSSRWorkflow.pssr_id == AnnexurePunchPoint.pssr_id,
+        )
+        if role != UserRole.ADMIN.value:
+            query = query.filter(AnnexurePunchPoint.assigned_to_user_id == current_user.id)
+        rows = query.filter(AnnexurePunchPoint.status.in_(["OPEN", "IN_PROGRESS"])).order_by(AnnexurePunchPoint.due_date.asc().nullslast(), AnnexurePunchPoint.updated_at.desc()).limit(50).all()
+        actor_ids = {
+            user_id
+            for punch, _ in rows
+            for user_id in [punch.raised_by_user_id, punch.assigned_by_user_id, punch.assigned_to_user_id]
+            if user_id
+        }
+        actors = {
+            user.id: user
+            for user in db.query(User).filter(User.id.in_(actor_ids)).all()
+        } if actor_ids else {}
+        tasks = []
+        for punch, workflow in rows:
+            question = db.query(PSSRQuestion).filter(
+                PSSRQuestion.pssr_id == workflow.pssr_id,
+                or_(PSSRQuestion.id == punch.question_id, PSSRQuestion.annexure_question_id == punch.question_id),
+            ).first() if punch.question_id else None
+            response = db.query(PSSRQuestionResponse).filter(PSSRQuestionResponse.pssr_question_id == question.id).first() if question else None
+            annexure = db.query(Annexure).filter(Annexure.id == question.annexure_id).first() if question and question.annexure_id else None
+            tasks.append(TeamDashboardTask(
+                id=workflow.pssr_id,
+                pssr_title=workflow.title,
+                unit=workflow.plant_unit,
+                department=punch.owning_department,
+                due_date=punch.due_date.date().isoformat() if punch.due_date else None,
+                questions_answered=0,
+                total_questions=0,
+                progress=0,
+                last_updated=punch.updated_at.isoformat() if punch.updated_at else None,
+                submitted_date=workflow.submitted_at.date().isoformat() if workflow.submitted_at else None,
+                reviewer_name=None,
+                status="In Progress" if punch.status == "IN_PROGRESS" else "To Do",
+                workflow_state=normalize_state(workflow.workflow_state),
+                ownership="punch_point",
+                punch_point_id=punch.id,
+                punch_point_title=punch.title,
+                punch_point_description=punch.description,
+                punch_checkpoint_question=question.question_text if question else None,
+                punch_original_answer=response.response if response else None,
+                punch_original_remarks=response.remarks if response else None,
+                punch_annexure_name=annexure.title if annexure else ("Custom checkpoint" if question and question.custom else None),
+                punch_question_number=question.sequence if question else None,
+                priority=punch.severity,
+                raised_by=PSSRWorkflowService._user_brief(actors.get(punch.raised_by_user_id)),
+                assigned_by=PSSRWorkflowService._user_brief(actors.get(punch.assigned_by_user_id)),
+                assigned_to=PSSRWorkflowService._user_brief(actors.get(punch.assigned_to_user_id)),
+                can_start=False,
+            ))
+        return tasks
+
+    @staticmethod
     def _workflow_monitor_task(db: Session, workflow: PSSRWorkflow, ownership: str, current_user: User) -> TeamDashboardTask:
         total = db.query(PSSRQuestion.id).filter(PSSRQuestion.pssr_id == workflow.pssr_id).count()
         answered = db.query(PSSRQuestionResponse.id).join(
@@ -353,6 +416,7 @@ class TeamService:
             completed=[],
             pending_review=[],
             approved=[],
+            assigned_punch_points=[],
             activity=[],
             stats=TeamDashboardStats(
                 draft_count=0,

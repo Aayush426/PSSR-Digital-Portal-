@@ -168,7 +168,9 @@ class PSSRPunchPointRequest(BaseModel):
     owning_department: str = Field(..., min_length=2, max_length=120)
     assigned_to_user_id: Optional[int] = None
     due_date: Optional[datetime] = None
+    progress_remarks: Optional[str] = Field(None, max_length=4000)
     closure_remarks: Optional[str] = Field(None, max_length=4000)
+    closure_evidence: Optional[str] = Field(None, max_length=4000)
     status: Literal["OPEN", "IN_PROGRESS", "CLOSED"] = "OPEN"
     question_id: Optional[int] = None
 

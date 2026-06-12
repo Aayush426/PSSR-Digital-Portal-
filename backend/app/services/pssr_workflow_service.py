@@ -1,6 +1,8 @@
 """Business service for initiated PSSR workflows."""
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
+from uuid import uuid4
 
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
@@ -12,7 +14,9 @@ from app.models.pssr import PSSRActivityLog
 from app.models.pssr_workflow import (
     PSSRAnnexureSelection,
     PSSRAuditLog,
+    PSSRCheckpointAttachment,
     PSSRNotification,
+    PSSRPunchPointEvidence,
     PSSRQuestion,
     PSSRQuestionResponse,
     PSSRTeamMemberAssignment,
@@ -22,6 +26,12 @@ from app.models.user import User, UserRole
 from app.schemas.pssr import PSSRCreateRequest, PSSREditRequest, PSSRPunchPointRequest, PSSRQuestionResponseRequest
 
 logger = get_logger(__name__)
+
+ATTACHMENT_STORAGE_DIR = Path(__file__).resolve().parents[3] / "storage" / "pssr_attachments"
+PUNCH_EVIDENCE_STORAGE_DIR = Path(__file__).resolve().parents[3] / "storage" / "punch_point_evidence"
+ALLOWED_ATTACHMENT_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png"}
+ALLOWED_ATTACHMENT_CONTENT_TYPES = {"application/pdf", "image/jpeg", "image/png"}
+ALLOWED_PUNCH_EVIDENCE_EXTENSIONS = ALLOWED_ATTACHMENT_EXTENSIONS | {".doc", ".docx", ".xls", ".xlsx", ".txt", ".csv"}
 
 
 UNDER_PREPARATION = "UNDER_PREPARATION"
@@ -34,6 +44,8 @@ REJECTED = "REJECTED"
 CLOSED = "CLOSED"
 
 TERMINAL_STATES = {APPROVED, CLOSED}
+PSSR_REVIEW_LOCKED_STATES = {APPROVED, CLOSED}
+RESPONSE_EDITABLE_STATES = {TODO, IN_PROGRESS, COMPLETED_BY_TEAM, PENDING_APPROVAL, REJECTED}
 TRANSITIONS = {
     UNDER_PREPARATION: {IN_PROGRESS},
     TODO: {IN_PROGRESS},
@@ -397,7 +409,7 @@ class PSSRWorkflowService:
     def update(db: Session, pssr_id: str, payload: PSSREditRequest, current_user: User) -> dict:
         workflow = PSSRWorkflowService._get_workflow(db, pssr_id)
         state = normalize_state(workflow.workflow_state)
-        if state in TERMINAL_STATES:
+        if state in PSSR_REVIEW_LOCKED_STATES:
             raise ValidationError("Closed PSSR workflows cannot be edited.")
         if workflow.initiator_user_id != current_user.id:
             raise AuthorizationError("Only the PSSR initiator can edit this workflow.")
@@ -692,10 +704,10 @@ class PSSRWorkflowService:
         if not confirmed:
             raise ValidationError("Confirmation is required to reopen department work.")
         workflow = PSSRWorkflowService._get_workflow(db, pssr_id)
-        if normalize_state(workflow.workflow_state) in TERMINAL_STATES:
+        if normalize_state(workflow.workflow_state) in PSSR_REVIEW_LOCKED_STATES:
             raise ValidationError("Closed PSSR workflows cannot be reopened.")
-        if workflow.initiator_user_id != current_user.id:
-            raise AuthorizationError("Only the PSSR initiator can reopen department work.")
+        if current_user.id not in {workflow.initiator_user_id, workflow.team_leader_user_id}:
+            raise AuthorizationError("Only the PSSR initiator or team leader can reopen department work.")
         now = datetime.utcnow()
         reopened = []
         for department in departments:
@@ -741,11 +753,28 @@ class PSSRWorkflowService:
             and not permissions["is_admin"]
         ):
             questions_query = questions_query.filter(PSSRQuestion.assigned_user_id == current_user.id)
+        elif not any(permissions[key] for key in ["is_assigned_member", "is_initiator", "is_team_leader", "is_area_owner", "is_admin"]):
+            punch_question_ids = [
+                row.question_id
+                for row in db.query(AnnexurePunchPoint.question_id).filter(
+                    AnnexurePunchPoint.pssr_id == pssr_id,
+                    AnnexurePunchPoint.assigned_to_user_id == current_user.id,
+                    AnnexurePunchPoint.question_id.isnot(None),
+                ).all()
+            ]
+            questions_query = questions_query.filter(
+                or_(PSSRQuestion.id.in_(punch_question_ids), PSSRQuestion.annexure_question_id.in_(punch_question_ids))
+            )
         questions = questions_query.order_by(PSSRQuestion.sequence.asc(), PSSRQuestion.id.asc()).all()
         responses = {
             row.pssr_question_id: row
             for row in db.query(PSSRQuestionResponse).filter(PSSRQuestionResponse.pssr_id == pssr_id).all()
         }
+        response_user_ids = {row.responded_by_user_id for row in responses.values() if row.responded_by_user_id}
+        attachment_rows = db.query(PSSRCheckpointAttachment).filter(PSSRCheckpointAttachment.pssr_id == pssr_id).all()
+        attachments_by_question: dict[int, list[PSSRCheckpointAttachment]] = {}
+        for attachment in attachment_rows:
+            attachments_by_question.setdefault(attachment.checkpoint_id, []).append(attachment)
         assignments = db.query(PSSRTeamMemberAssignment).filter(PSSRTeamMemberAssignment.pssr_id == pssr_id).all()
         question_user_ids = {item.assigned_user_id for item in questions if item.assigned_user_id}
         punch_points = (
@@ -755,7 +784,19 @@ class PSSRWorkflowService:
             .all()
         )
         punch_user_ids = {item.assigned_to_user_id for item in punch_points if item.assigned_to_user_id}
-        assignment_user_ids = list({item.user_id for item in assignments if item.user_id} | question_user_ids | punch_user_ids)
+        punch_actor_ids = {
+            user_id
+            for item in punch_points
+            for user_id in [item.raised_by_user_id, item.assigned_by_user_id, item.closed_by_user_id]
+            if user_id
+        }
+        attachment_user_ids = {item.uploaded_by_user_id for item in attachment_rows if item.uploaded_by_user_id}
+        evidence_rows = db.query(PSSRPunchPointEvidence).filter(PSSRPunchPointEvidence.pssr_id == pssr_id).order_by(PSSRPunchPointEvidence.uploaded_at.asc()).all()
+        evidence_by_punch: dict[int, list[PSSRPunchPointEvidence]] = {}
+        for evidence in evidence_rows:
+            evidence_by_punch.setdefault(evidence.punch_point_id, []).append(evidence)
+        evidence_user_ids = {item.uploaded_by_user_id for item in evidence_rows if item.uploaded_by_user_id}
+        assignment_user_ids = list({item.user_id for item in assignments if item.user_id} | question_user_ids | punch_user_ids | punch_actor_ids | response_user_ids | attachment_user_ids | evidence_user_ids)
         users = {
             user.id: user
             for user in db.query(User).filter(User.id.in_(assignment_user_ids)).all()
@@ -764,6 +805,30 @@ class PSSRWorkflowService:
             Annexure,
             Annexure.id == PSSRAnnexureSelection.annexure_id,
         ).filter(PSSRAnnexureSelection.pssr_id == pssr_id).all()
+        annexure_names = {annexure.id: annexure.title for _, annexure in annexures}
+        punch_questions = db.query(PSSRQuestion).filter(PSSRQuestion.pssr_id == pssr_id).all()
+        punch_contexts = {}
+        for punch in punch_points:
+            question = next((
+                item for item in punch_questions
+                if item.id == punch.question_id or item.annexure_question_id == punch.question_id
+            ), None)
+            if question:
+                response = responses.get(question.id)
+                punch_contexts[punch.id] = {
+                    "checkpoint_id": question.id,
+                    "checkpoint_question": question.question_text,
+                    "checkpoint_description": question.question_description,
+                    "department": question.department_owner,
+                    "annexure_name": annexure_names.get(question.annexure_id, "Custom checkpoint" if question.custom else None),
+                    "question_number": question.sequence,
+                    "original_answer": response.response if response else "PENDING",
+                    "original_remarks": response.remarks if response else question.remarks,
+                    "checkpoint_attachments": [
+                        PSSRWorkflowService._attachment_dict(item, users.get(item.uploaded_by_user_id))
+                        for item in attachments_by_question.get(question.id, [])
+                    ],
+                }
         audit_rows = db.query(PSSRAuditLog).filter(PSSRAuditLog.pssr_id == pssr_id).order_by(PSSRAuditLog.created_at.asc()).limit(100).all()
         audit_user_ids = list({row.actor_user_id for row in audit_rows if row.actor_user_id})
         audit_users = {
@@ -788,6 +853,9 @@ class PSSRWorkflowService:
                     item,
                     responses.get(item.id),
                     assigned_user=users.get(item.assigned_user_id),
+                    responded_user=users.get(responses.get(item.id).responded_by_user_id) if responses.get(item.id) and responses.get(item.id).responded_by_user_id else None,
+                    attachments=attachments_by_question.get(item.id, []),
+                    attachment_users=users,
                     can_answer=(
                         PSSRWorkflowService._answers_editable(workflow)
                         and (
@@ -802,6 +870,7 @@ class PSSRWorkflowService:
                 )
                 for item in questions
             ],
+            "department_progress": PSSRWorkflowService._department_progress(db, pssr_id, assignments),
             "annexures": [
                 {
                     "id": selection.annexure_id,
@@ -814,23 +883,12 @@ class PSSRWorkflowService:
                 for selection, annexure in annexures
             ],
             "punch_points": [
-                {
-                    "id": row.id,
-                    "title": row.title,
-                    "description": row.description,
-                    "category": row.category,
-                    "severity": row.severity,
-                    "status": row.status,
-                    "owning_department": row.owning_department,
-                    "assigned_to_user_id": row.assigned_to_user_id,
-                    "assigned_to_user": PSSRWorkflowService._user_brief(users.get(row.assigned_to_user_id)),
-                    "question_id": row.question_id,
-                    "workflow_reference": row.pssr_id,
-                    "due_date": row.due_date.isoformat() if row.due_date else None,
-                    "remarks": row.closure_remarks,
-                    "created_at": row.raised_at.isoformat(),
-                    "updated_at": row.updated_at.isoformat() if row.updated_at else None,
-                }
+                PSSRWorkflowService._punch_dict(
+                    row,
+                    users,
+                    context=punch_contexts.get(row.id),
+                    evidence=evidence_by_punch.get(row.id, []),
+                )
                 for row in punch_points
             ],
             "audit_timeline": [
@@ -889,10 +947,10 @@ class PSSRWorkflowService:
     def respond(db: Session, pssr_id: str, question_id: int, payload: PSSRQuestionResponseRequest, current_user: User) -> dict:
         workflow = PSSRWorkflowService._get_workflow(db, pssr_id)
         state = normalize_state(workflow.workflow_state)
-        if state in TERMINAL_STATES:
+        if state in PSSR_REVIEW_LOCKED_STATES:
             raise ValidationError("Closed PSSR workflows cannot be modified.")
         if not PSSRWorkflowService._answers_editable(workflow):
-            raise ValidationError("PSSR responses are locked after Area Owner Approval routing.")
+            raise ValidationError("PSSR responses are locked after Area Owner approval.")
         if PSSRWorkflowService._role(current_user) == UserRole.ADMIN.value:
             raise AuthorizationError("Admin users have supervisory read-only access and cannot answer PSSR questions.")
         question = db.query(PSSRQuestion).filter(PSSRQuestion.id == question_id, PSSRQuestion.pssr_id == pssr_id).first()
@@ -914,6 +972,7 @@ class PSSRWorkflowService:
         if not response:
             response = PSSRQuestionResponse(pssr_id=pssr_id, pssr_question_id=question.id)
             db.add(response)
+        PSSRWorkflowService._validate_attachment_metadata(payload.attachments)
         response.response = payload.response
         response.remarks = payload.remarks
         response.attachments = payload.attachments
@@ -928,6 +987,122 @@ class PSSRWorkflowService:
         PSSRWorkflowService._refresh_workflow_state(db, workflow, current_user, now)
         db.commit()
         return PSSRWorkflowService._question_dict(question, response)
+
+    @staticmethod
+    def upload_checkpoint_attachment(db: Session, pssr_id: str, question_id: int, upload, current_user: User) -> dict:
+        workflow = PSSRWorkflowService._get_workflow(db, pssr_id)
+        if not PSSRWorkflowService._answers_editable(workflow):
+            raise ValidationError("PSSR responses are locked after Area Owner approval.")
+        question = db.query(PSSRQuestion).filter(PSSRQuestion.id == question_id, PSSRQuestion.pssr_id == pssr_id).first()
+        if not question:
+            raise ResourceNotFoundError("PSSR question", question_id)
+        PSSRWorkflowService._ensure_question_actor(db, workflow, question, current_user)
+        original_name = Path(upload.filename or "").name
+        PSSRWorkflowService._validate_upload_file(original_name, upload.content_type)
+        content = upload.file.read()
+        if not content:
+            raise ValidationError("Attachment file is empty.")
+
+        now = datetime.utcnow()
+        ATTACHMENT_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+        extension = Path(original_name).suffix.lower()
+        stored_name = f"{pssr_id}_{question_id}_{uuid4().hex}{extension}"
+        storage_path = ATTACHMENT_STORAGE_DIR / stored_name
+        storage_path.write_bytes(content)
+
+        response = db.query(PSSRQuestionResponse).filter(PSSRQuestionResponse.pssr_question_id == question.id).first()
+        if not response:
+            response = PSSRQuestionResponse(pssr_id=pssr_id, pssr_question_id=question.id)
+            db.add(response)
+            db.flush()
+
+        attachment = PSSRCheckpointAttachment(
+            pssr_id=pssr_id,
+            checkpoint_id=question.id,
+            response_id=response.id,
+            file_name=original_name,
+            storage_path=str(storage_path),
+            content_type=upload.content_type or PSSRWorkflowService._content_type_for_extension(extension),
+            size=len(content),
+            uploaded_by_user_id=current_user.id,
+            uploader_employee_code=current_user.employee_id,
+            uploaded_at=now,
+        )
+        db.add(attachment)
+        db.flush()
+        metadata = PSSRWorkflowService._attachment_dict(attachment, current_user)
+        response.attachments = [metadata]
+        response.responded_by_user_id = response.responded_by_user_id or current_user.id
+        response.responded_by_department = response.responded_by_department or current_user.department or question.department_owner
+        response.updated_at = now
+        PSSRWorkflowService._audit(db, pssr_id, current_user.id, "CHECKPOINT_ATTACHMENT_UPLOADED", f"Attachment uploaded for question {question.id}.", {"question_id": question.id, "file_name": original_name})
+        db.commit()
+        return metadata
+
+    @staticmethod
+    def get_checkpoint_attachment(db: Session, pssr_id: str, attachment_id: int, current_user: User) -> PSSRCheckpointAttachment:
+        workflow = PSSRWorkflowService._get_workflow(db, pssr_id)
+        PSSRWorkflowService._ensure_workflow_access(db, workflow, current_user)
+        attachment = db.query(PSSRCheckpointAttachment).filter(
+            PSSRCheckpointAttachment.id == attachment_id,
+            PSSRCheckpointAttachment.pssr_id == pssr_id,
+        ).first()
+        if not attachment:
+            raise ResourceNotFoundError("Checkpoint attachment", attachment_id)
+        return attachment
+
+    @staticmethod
+    def upload_punch_evidence(db: Session, pssr_id: str, punch_point_id: int, upload, current_user: User) -> dict:
+        workflow = PSSRWorkflowService._get_workflow(db, pssr_id)
+        punch = db.query(AnnexurePunchPoint).filter(
+            AnnexurePunchPoint.id == punch_point_id,
+            AnnexurePunchPoint.pssr_id == pssr_id,
+        ).first()
+        if not punch:
+            raise ResourceNotFoundError("Punchlist item", punch_point_id)
+        if current_user.id not in {workflow.initiator_user_id, workflow.area_owner_user_id, punch.assigned_to_user_id}:
+            raise AuthorizationError("Only the Initiator, Area Owner, or assigned punch point owner can upload evidence.")
+        original_name = Path(upload.filename or "").name
+        extension = Path(original_name).suffix.lower()
+        if extension not in ALLOWED_PUNCH_EVIDENCE_EXTENSIONS:
+            raise ValidationError("Punch evidence must be an image, PDF, Word, Excel, text, or CSV document.")
+        content = upload.file.read()
+        if not content:
+            raise ValidationError("Evidence file is empty.")
+
+        now = datetime.utcnow()
+        PUNCH_EVIDENCE_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+        storage_path = PUNCH_EVIDENCE_STORAGE_DIR / f"{pssr_id}_{punch_point_id}_{uuid4().hex}{extension}"
+        storage_path.write_bytes(content)
+        evidence = PSSRPunchPointEvidence(
+            pssr_id=pssr_id,
+            punch_point_id=punch_point_id,
+            file_name=original_name,
+            storage_path=str(storage_path),
+            content_type=upload.content_type or "application/octet-stream",
+            size=len(content),
+            uploaded_by_user_id=current_user.id,
+            uploader_employee_code=current_user.employee_id,
+            uploaded_at=now,
+        )
+        db.add(evidence)
+        db.flush()
+        PSSRWorkflowService._audit(db, pssr_id, current_user.id, "PUNCH_EVIDENCE_UPLOADED", f"Evidence uploaded by {current_user.full_name}: {original_name}.", {"punch_point_id": punch_point_id, "evidence_id": evidence.id, "file_name": original_name})
+        db.commit()
+        return PSSRWorkflowService._punch_evidence_dict(evidence, current_user)
+
+    @staticmethod
+    def get_punch_evidence(db: Session, pssr_id: str, punch_point_id: int, evidence_id: int, current_user: User) -> PSSRPunchPointEvidence:
+        workflow = PSSRWorkflowService._get_workflow(db, pssr_id)
+        PSSRWorkflowService._ensure_workflow_access(db, workflow, current_user)
+        evidence = db.query(PSSRPunchPointEvidence).filter(
+            PSSRPunchPointEvidence.id == evidence_id,
+            PSSRPunchPointEvidence.pssr_id == pssr_id,
+            PSSRPunchPointEvidence.punch_point_id == punch_point_id,
+        ).first()
+        if not evidence:
+            raise ResourceNotFoundError("Punch point evidence", evidence_id)
+        return evidence
 
     @staticmethod
     def complete_my_side(db: Session, pssr_id: str, confirmed: bool, current_user: User) -> dict:
@@ -1006,8 +1181,6 @@ class PSSRWorkflowService:
         for assignment in assignments:
             if not PSSRWorkflowService._assignment_required_questions_answered(db, pssr_id, assignment.department, assignment.user_id):
                 raise ValidationError(f"Mandatory checkpoints are still pending for {assignment.department}.")
-            if PSSRWorkflowService._open_punch_point_count(db, pssr_id, assignment.department):
-                raise ValidationError(f"Open punchlist items must be closed for {assignment.department} before department completion.")
             assignment.status = "COMPLETED"
             assignment.completed_at = now
             assignment.updated_at = now
@@ -1044,13 +1217,19 @@ class PSSRWorkflowService:
             status=payload.status,
             owning_department=payload.owning_department,
             assigned_to_user_id=payload.assigned_to_user_id,
+            assigned_by_user_id=current_user.id if payload.assigned_to_user_id else None,
             due_date=payload.due_date,
+            progress_remarks=payload.progress_remarks,
             closure_remarks=payload.closure_remarks,
+            closure_evidence=payload.closure_evidence,
             raised_by_user_id=current_user.id,
         )
         db.add(punch)
         db.flush()
         PSSRWorkflowService._audit(db, pssr_id, current_user.id, "PUNCH_CREATED", f"Punchlist item created: {payload.title}.", {"department": payload.owning_department})
+        if payload.assigned_to_user_id:
+            assignee = db.query(User).filter(User.id == payload.assigned_to_user_id).first()
+            PSSRWorkflowService._audit(db, pssr_id, current_user.id, "PUNCH_ASSIGNED", f"Punch point assigned to {assignee.full_name if assignee else 'team member'}.", {"punch_point_id": punch.id, "assigned_to_user_id": payload.assigned_to_user_id})
         PSSRWorkflowService._refresh_workflow_state(db, workflow, current_user)
         db.commit()
         return PSSRWorkflowService._punch_dict(punch)
@@ -1058,25 +1237,64 @@ class PSSRWorkflowService:
     @staticmethod
     def update_punch_point(db: Session, pssr_id: str, punch_point_id: int, payload: PSSRPunchPointRequest, current_user: User) -> dict:
         workflow = PSSRWorkflowService._get_workflow(db, pssr_id)
-        PSSRWorkflowService._ensure_punch_editor(workflow, current_user)
         punch = db.query(AnnexurePunchPoint).filter(
             AnnexurePunchPoint.id == punch_point_id,
             AnnexurePunchPoint.pssr_id == pssr_id,
         ).first()
         if not punch:
             raise ResourceNotFoundError("Punchlist item", punch_point_id)
+        PSSRWorkflowService._ensure_punch_update_actor(workflow, punch, payload, current_user)
         PSSRWorkflowService._ensure_punch_assignment_scope(db, pssr_id, payload)
+        previous_status = punch.status
+        previous_assignee_id = punch.assigned_to_user_id
+        previous_progress_remarks = punch.progress_remarks
+        previous_closure_remarks = punch.closure_remarks
         punch.title = payload.title
         punch.description = payload.description
         punch.category = payload.category
         punch.severity = PSSRWorkflowService._severity_for_category(payload.category)
+        assignment_changed = (
+            punch.assigned_to_user_id != payload.assigned_to_user_id
+            or not PSSRWorkflowService._department_matches(punch.owning_department, payload.owning_department)
+            or not PSSRWorkflowService._department_matches(payload.owning_department, punch.owning_department)
+        )
         punch.status = payload.status
         punch.owning_department = payload.owning_department
         punch.assigned_to_user_id = payload.assigned_to_user_id
+        if assignment_changed:
+            punch.assigned_by_user_id = current_user.id if payload.assigned_to_user_id else None
         punch.due_date = payload.due_date
+        punch.progress_remarks = payload.progress_remarks
         punch.closure_remarks = payload.closure_remarks
+        punch.closure_evidence = payload.closure_evidence
+        if payload.status == "CLOSED" and previous_status != "CLOSED":
+            punch.closed_by_user_id = current_user.id
+            punch.closed_at = datetime.utcnow()
+        elif payload.status != "CLOSED":
+            punch.closed_by_user_id = None
+            punch.closed_at = None
         punch.updated_at = datetime.utcnow()
-        PSSRWorkflowService._audit(db, pssr_id, current_user.id, "PUNCH_UPDATED", f"Punchlist item updated: {payload.title}.", {"department": payload.owning_department, "status": payload.status})
+        if assignment_changed:
+            actor_ids = [item for item in [previous_assignee_id, payload.assigned_to_user_id] if item]
+            actors = {row.id: row for row in db.query(User).filter(User.id.in_(actor_ids)).all()} if actor_ids else {}
+            if previous_assignee_id and payload.assigned_to_user_id:
+                summary = f"Punch point reassigned from {actors.get(previous_assignee_id).full_name if actors.get(previous_assignee_id) else 'team member'} to {actors.get(payload.assigned_to_user_id).full_name if actors.get(payload.assigned_to_user_id) else 'team member'}."
+                action = "PUNCH_REASSIGNED"
+            elif payload.assigned_to_user_id:
+                summary = f"Punch point assigned to {actors.get(payload.assigned_to_user_id).full_name if actors.get(payload.assigned_to_user_id) else 'team member'}."
+                action = "PUNCH_ASSIGNED"
+            else:
+                summary = "Punch point assignment removed."
+                action = "PUNCH_UNASSIGNED"
+            PSSRWorkflowService._audit(db, pssr_id, current_user.id, action, summary, {"punch_point_id": punch.id, "from_user_id": previous_assignee_id, "to_user_id": payload.assigned_to_user_id})
+        if previous_status != payload.status:
+            PSSRWorkflowService._audit(db, pssr_id, current_user.id, "PUNCH_STATUS_CHANGED", f"Status changed from {previous_status} to {payload.status}.", {"punch_point_id": punch.id, "from_status": previous_status, "to_status": payload.status})
+        if previous_progress_remarks != payload.progress_remarks:
+            PSSRWorkflowService._audit(db, pssr_id, current_user.id, "PUNCH_PROGRESS_REMARKS", "Progress remarks updated.", {"punch_point_id": punch.id})
+        if previous_closure_remarks != payload.closure_remarks:
+            PSSRWorkflowService._audit(db, pssr_id, current_user.id, "PUNCH_CLOSURE_REMARKS", "Closure remarks added." if payload.closure_remarks else "Closure remarks cleared.", {"punch_point_id": punch.id})
+        if not assignment_changed and previous_status == payload.status and previous_progress_remarks == payload.progress_remarks and previous_closure_remarks == payload.closure_remarks:
+            PSSRWorkflowService._audit(db, pssr_id, current_user.id, "PUNCH_UPDATED", f"Punchlist item updated: {payload.title}.", {"department": payload.owning_department, "status": payload.status})
         PSSRWorkflowService._refresh_workflow_state(db, workflow, current_user)
         db.commit()
         return PSSRWorkflowService._punch_dict(punch)
@@ -1088,7 +1306,8 @@ class PSSRWorkflowService:
         current_state = normalize_state(workflow.workflow_state)
         PSSRWorkflowService._ensure_transition_actor(db, workflow, target_state, current_user)
         allowed = TRANSITIONS.get(current_state, set())
-        if target_state not in allowed:
+        ready_for_area_owner = target_state == PENDING_APPROVAL and PSSRWorkflowService._department_work_ready_for_area_owner(db, workflow)
+        if target_state not in allowed and not (ready_for_area_owner and current_state in {TODO, IN_PROGRESS, COMPLETED_BY_TEAM}):
             raise ValidationError(f"Cannot transition from {workflow.workflow_state} to {target_state}.")
         if target_state == PENDING_APPROVAL and area_owner_user_id:
             area_owner = db.query(User).filter(User.id == area_owner_user_id).first()
@@ -1096,7 +1315,7 @@ class PSSRWorkflowService:
                 raise ValidationError("Selected Area Owner is not an active AREA_OWNER user.")
             workflow.area_owner_user_id = area_owner_user_id
         if target_state == PENDING_APPROVAL and not PSSRWorkflowService._area_owner_ready(db, workflow):
-            raise ValidationError("Cannot send to Area Owner until all active departments are leader-finalized and an Area Owner is assigned.")
+            raise ValidationError("Cannot send to Area Owner until mandatory checkpoints are answered, active departments are finalized, and an Area Owner is assigned.")
         if target_state == REJECTED:
             workflow.workflow_state = REJECTED
             workflow.updated_at = datetime.utcnow()
@@ -1119,12 +1338,13 @@ class PSSRWorkflowService:
             db.commit()
             return PSSRWorkflowService.get(db, pssr_id, current_user)
         if target_state in {IN_PROGRESS, COMPLETED_BY_TEAM}:
-            raise ValidationError("Workflow execution state is controlled by question completion and punchlist status.")
+            raise ValidationError("Workflow execution state is controlled by checkpoint answers and department finalization.")
         workflow.workflow_state = target_state
         now = datetime.utcnow()
         workflow.updated_at = now
         if target_state == APPROVED:
             workflow.approved_at = now
+            workflow.closed_at = now
         if target_state == CLOSED:
             if current_state != APPROVED:
                 raise ValidationError("Cannot close workflow before Area Owner approval.")
@@ -1261,7 +1481,11 @@ class PSSRWorkflowService:
             PSSRTeamMemberAssignment.pssr_id == workflow.pssr_id,
             PSSRTeamMemberAssignment.user_id == current_user.id,
         ).first()
-        if not exists:
+        punch_exists = db.query(AnnexurePunchPoint.id).filter(
+            AnnexurePunchPoint.pssr_id == workflow.pssr_id,
+            AnnexurePunchPoint.assigned_to_user_id == current_user.id,
+        ).first()
+        if not exists and not punch_exists:
             raise AuthorizationError("Workflow access is outside your assigned scope.")
 
     @staticmethod
@@ -1439,7 +1663,14 @@ class PSSRWorkflowService:
         }
 
     @staticmethod
-    def _punch_dict(row: AnnexurePunchPoint) -> dict:
+    def _punch_dict(
+        row: AnnexurePunchPoint,
+        users: Optional[dict[int, User]] = None,
+        *,
+        context: Optional[dict] = None,
+        evidence: Optional[list[PSSRPunchPointEvidence]] = None,
+    ) -> dict:
+        users = users or {}
         return {
             "id": row.id,
             "title": row.title,
@@ -1449,12 +1680,51 @@ class PSSRWorkflowService:
             "status": row.status,
             "owning_department": row.owning_department,
             "assigned_to_user_id": row.assigned_to_user_id,
+            "assigned_to_user": PSSRWorkflowService._user_brief(users.get(row.assigned_to_user_id)),
+            "assigned_by_user_id": row.assigned_by_user_id,
+            "assigned_by": PSSRWorkflowService._user_brief(users.get(row.assigned_by_user_id)),
+            "raised_by_user_id": row.raised_by_user_id,
+            "raised_by": PSSRWorkflowService._user_brief(users.get(row.raised_by_user_id)),
             "question_id": row.question_id,
             "workflow_reference": row.pssr_id,
+            "pssr_number": row.pssr_id,
             "due_date": row.due_date.isoformat() if row.due_date else None,
-            "remarks": row.closure_remarks,
+            "remarks": row.progress_remarks,
+            "progress_remarks": row.progress_remarks,
+            "closure_remarks": row.closure_remarks,
+            "closure_evidence": row.closure_evidence,
+            "generation_reason": (
+                "Generated because the original checkpoint answer was NO."
+                if (context or {}).get("original_answer") == "NO"
+                else "Raised manually by the Initiator or Area Owner."
+            ),
+            "evidence_attachments": [
+                PSSRWorkflowService._punch_evidence_dict(item, users.get(item.uploaded_by_user_id))
+                for item in (evidence or [])
+            ],
+            **(context or {}),
             "created_at": row.raised_at.isoformat(),
+            "closed_at": row.closed_at.isoformat() if row.closed_at else None,
+            "closed_by_user_id": row.closed_by_user_id,
+            "closed_by": PSSRWorkflowService._user_brief(users.get(row.closed_by_user_id)),
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        }
+
+    @staticmethod
+    def _punch_evidence_dict(evidence: PSSRPunchPointEvidence, uploader: Optional[User]) -> dict:
+        return {
+            "id": evidence.id,
+            "file_name": evidence.file_name,
+            "content_type": evidence.content_type,
+            "size": evidence.size,
+            "punch_point_id": evidence.punch_point_id,
+            "pssr_id": evidence.pssr_id,
+            "uploaded_by_user_id": evidence.uploaded_by_user_id,
+            "uploaded_by": PSSRWorkflowService._user_brief(uploader),
+            "uploader_employee_code": evidence.uploader_employee_code,
+            "uploaded_at": evidence.uploaded_at.isoformat() if evidence.uploaded_at else None,
+            "view_url": f"/pssr/{evidence.pssr_id}/punch-points/{evidence.punch_point_id}/evidence/{evidence.id}/view",
+            "download_url": f"/pssr/{evidence.pssr_id}/punch-points/{evidence.punch_point_id}/evidence/{evidence.id}/download",
         }
 
     @staticmethod
@@ -1468,6 +1738,7 @@ class PSSRWorkflowService:
             "email": user.email,
             "department": user.department,
             "designation": user.designation,
+            "role": PSSRWorkflowService._role(user),
         }
 
     @staticmethod
@@ -1479,6 +1750,7 @@ class PSSRWorkflowService:
         ).all()
         is_initiator = current_user.id == workflow.initiator_user_id
         is_leader = current_user.id == workflow.team_leader_user_id
+        is_area_owner = current_user.id == workflow.area_owner_user_id
         is_assigned_member = bool(assignments)
         editable_departments = []
         state = normalize_state(workflow.workflow_state)
@@ -1505,25 +1777,41 @@ class PSSRWorkflowService:
         can_send_to_area_owner = (
             is_initiator
             and role != UserRole.ADMIN.value
-            and state == COMPLETED_BY_TEAM
+            and state in {TODO, IN_PROGRESS, COMPLETED_BY_TEAM}
             and PSSRWorkflowService._department_work_ready_for_area_owner(db, workflow)
         )
         return {
             "is_admin": role == UserRole.ADMIN.value,
             "is_initiator": is_initiator,
             "is_team_leader": is_leader,
+            "is_area_owner": is_area_owner,
             "is_assigned_member": is_assigned_member,
             "can_submit": is_initiator and state in {UNDER_PREPARATION, REJECTED} and role != UserRole.ADMIN.value,
-            "can_edit_header": is_initiator and state not in TERMINAL_STATES and role != UserRole.ADMIN.value,
-            "can_edit_punchlist": is_initiator and PSSRWorkflowService._answers_editable(workflow) and role != UserRole.ADMIN.value,
+            "can_edit_header": is_initiator and state not in PSSR_REVIEW_LOCKED_STATES and role != UserRole.ADMIN.value,
+            "can_edit_punchlist": (is_initiator or is_area_owner) and PSSRWorkflowService._punch_points_editable(workflow) and role != UserRole.ADMIN.value,
             "can_complete_my_side": can_complete_my_side,
             "can_finalize_department_work": can_finalize_department_work,
             "can_send_to_area_owner": can_send_to_area_owner,
+            "routing_ready": PSSRWorkflowService._department_work_ready_for_area_owner(db, workflow),
             "editable_departments": editable_departments,
         }
 
     @staticmethod
-    def _question_dict(question: PSSRQuestion, response: Optional[PSSRQuestionResponse], *, assigned_user: Optional[User] = None, can_answer: bool = False) -> dict:
+    def _question_dict(
+        question: PSSRQuestion,
+        response: Optional[PSSRQuestionResponse],
+        *,
+        assigned_user: Optional[User] = None,
+        responded_user: Optional[User] = None,
+        attachments: Optional[list[PSSRCheckpointAttachment]] = None,
+        attachment_users: Optional[dict[int, User]] = None,
+        can_answer: bool = False,
+    ) -> dict:
+        attachment_metadata = [
+            PSSRWorkflowService._attachment_dict(attachment, (attachment_users or {}).get(attachment.uploaded_by_user_id))
+            for attachment in (attachments or [])
+        ]
+        fallback_attachments = response.attachments if response and response.attachments else []
         return {
             "id": question.id,
             "pssr_id": question.pssr_id,
@@ -1547,11 +1835,56 @@ class PSSRWorkflowService:
                 "id": response.id,
                 "response": response.response,
                 "remarks": response.remarks,
-                "attachments": response.attachments or [],
+                "attachments": attachment_metadata or fallback_attachments,
                 "responded_by_user_id": response.responded_by_user_id,
+                "responded_by": PSSRWorkflowService._user_brief(responded_user),
+                "responded_by_department": response.responded_by_department,
                 "responded_at": response.responded_at.isoformat() if response.responded_at else None,
+                "updated_at": response.updated_at.isoformat() if response.updated_at else None,
             } if response else None,
         }
+
+    @staticmethod
+    def _attachment_dict(attachment: PSSRCheckpointAttachment, uploader: Optional[User]) -> dict:
+        return {
+            "id": attachment.id,
+            "file_name": attachment.file_name,
+            "attachment_name": attachment.file_name,
+            "content_type": attachment.content_type,
+            "size": attachment.size,
+            "checkpoint_id": attachment.checkpoint_id,
+            "pssr_id": attachment.pssr_id,
+            "uploaded_by_user_id": attachment.uploaded_by_user_id,
+            "uploaded_by": PSSRWorkflowService._user_brief(uploader),
+            "uploader_employee_code": attachment.uploader_employee_code,
+            "uploaded_at": attachment.uploaded_at.isoformat() if attachment.uploaded_at else None,
+            "file_type": attachment.content_type,
+            "view_url": f"/pssr/{attachment.pssr_id}/attachments/{attachment.id}/view",
+            "download_url": f"/pssr/{attachment.pssr_id}/attachments/{attachment.id}/download",
+        }
+
+    @staticmethod
+    def _validate_upload_file(file_name: str, content_type: Optional[str]) -> None:
+        extension = Path(file_name).suffix.lower()
+        if extension not in ALLOWED_ATTACHMENT_EXTENSIONS:
+            raise ValidationError("Only PDF, JPG, JPEG, and PNG checkpoint attachments are allowed.")
+        if content_type and content_type not in ALLOWED_ATTACHMENT_CONTENT_TYPES:
+            raise ValidationError("Only PDF, JPG, JPEG, and PNG checkpoint attachments are allowed.")
+
+    @staticmethod
+    def _validate_attachment_metadata(attachments: list[dict]) -> None:
+        for attachment in attachments or []:
+            file_name = str(attachment.get("file_name") or attachment.get("attachment_name") or "")
+            content_type = attachment.get("content_type") or attachment.get("file_type")
+            PSSRWorkflowService._validate_upload_file(file_name, str(content_type) if content_type else None)
+
+    @staticmethod
+    def _content_type_for_extension(extension: str) -> str:
+        if extension == ".pdf":
+            return "application/pdf"
+        if extension == ".png":
+            return "image/png"
+        return "image/jpeg"
 
     @staticmethod
     def _notify_assignment(db: Session, workflow: PSSRWorkflow, assignment: PSSRTeamMemberAssignment, current_user: User) -> None:
@@ -1578,44 +1911,68 @@ class PSSRWorkflowService:
         ).first()
         if existing:
             return
-        assignment = db.query(PSSRTeamMemberAssignment).filter(
-            PSSRTeamMemberAssignment.pssr_id == workflow.pssr_id,
-            PSSRTeamMemberAssignment.department == question.department_owner,
-        ).order_by(PSSRTeamMemberAssignment.id.asc()).first()
-        db.add(AnnexurePunchPoint(
-            pssr_id=workflow.pssr_id,
-            annexure_id=question.annexure_id,
-            question_id=question.annexure_question_id,
-            title=f"PSSR question failed: {question.category}",
-            description=payload.remarks or question.question_text,
-            category="A" if question.mandatory else "B",
-            severity="HIGH" if question.mandatory else "LOW",
-            status="OPEN",
-            owning_department=question.department_owner,
-            assigned_to_user_id=assignment.user_id if assignment else None,
-            raised_by_user_id=current_user.id,
-        ))
+        db.add(
+            AnnexurePunchPoint(
+                pssr_id=workflow.pssr_id,
+                annexure_id=question.annexure_id,
+                question_id=question.annexure_question_id,
+                title=f"PSSR question failed: {question.category}",
+                description=payload.remarks or question.question_text,
+                category="A" if question.mandatory else "B",
+                severity="HIGH" if question.mandatory else "LOW",
+                status="OPEN",
+                owning_department=question.department_owner,
+                assigned_to_user_id=None,
+                assigned_by_user_id=None,
+                raised_by_user_id=current_user.id,
+            )
+        )
         PSSRWorkflowService._audit(db, workflow.pssr_id, current_user.id, "PUNCH_CREATED", f"Punch list entry created for question {question.id}.", {"department": question.department_owner})
 
     @staticmethod
     def _ensure_punch_editor(workflow: PSSRWorkflow, current_user: User) -> None:
-        if current_user.id != workflow.initiator_user_id:
-            raise AuthorizationError("Only the PSSR Initiator can edit the punchlist.")
-        if not PSSRWorkflowService._answers_editable(workflow):
+        if current_user.id not in {workflow.initiator_user_id, workflow.area_owner_user_id}:
+            raise AuthorizationError("Only the PSSR Initiator or Area Owner can edit the punchlist.")
+        if not PSSRWorkflowService._punch_points_editable(workflow):
             raise ValidationError("Closed PSSR workflows cannot be modified.")
+
+    @staticmethod
+    def _ensure_punch_update_actor(workflow: PSSRWorkflow, punch: AnnexurePunchPoint, payload: PSSRPunchPointRequest, current_user: User) -> None:
+        if not PSSRWorkflowService._punch_points_editable(workflow):
+            raise ValidationError("Closed PSSR workflows cannot be modified.")
+        if current_user.id in {workflow.initiator_user_id, workflow.area_owner_user_id}:
+            return
+        if punch.assigned_to_user_id != current_user.id:
+            raise AuthorizationError("Only the PSSR Initiator, Area Owner, or assigned punch point owner can update the punchlist.")
+        if (
+            payload.title != punch.title
+            or payload.description != punch.description
+            or payload.category != punch.category
+            or payload.due_date != punch.due_date
+            or payload.question_id != punch.question_id
+        ):
+            raise AuthorizationError("Assigned punch point owners can only update status, progress remarks, closure remarks, and evidence.")
+        if payload.assigned_to_user_id != punch.assigned_to_user_id:
+            raise AuthorizationError("Assigned punch point owners cannot assign or reassign punch points.")
+        if not (
+            PSSRWorkflowService._department_matches(punch.owning_department, payload.owning_department)
+            and PSSRWorkflowService._department_matches(payload.owning_department, punch.owning_department)
+        ):
+            raise AuthorizationError("Assigned punch point owners cannot change the owning department.")
 
     @staticmethod
     def _ensure_punch_assignment_scope(db: Session, pssr_id: str, payload: PSSRPunchPointRequest) -> None:
         if not payload.assigned_to_user_id:
             return
-        assignment = db.query(PSSRTeamMemberAssignment).filter(
-            PSSRTeamMemberAssignment.pssr_id == pssr_id,
-            PSSRTeamMemberAssignment.user_id == payload.assigned_to_user_id,
-        ).all()
-        if not any(
-            PSSRWorkflowService._department_matches(item.department, payload.owning_department)
-            or PSSRWorkflowService._department_matches(payload.owning_department, item.department)
-            for item in assignment
+        user = db.query(User).filter(User.id == payload.assigned_to_user_id).first()
+        if (
+            not user
+            or not user.active
+            or PSSRWorkflowService._role(user) != UserRole.TEAM_MEMBER.value
+            or not (
+                PSSRWorkflowService._department_matches(payload.owning_department, user.department)
+                or PSSRWorkflowService._department_matches(user.department or "", payload.owning_department)
+            )
         ):
             raise ValidationError("Punchlist responsible member must belong to the owning department.")
 
@@ -1630,8 +1987,6 @@ class PSSRWorkflowService:
     @staticmethod
     def _questions_for_assignment(db: Session, pssr_id: str, department: str, user_id: Optional[int] = None, *, mandatory_only: bool = False) -> list[PSSRQuestion]:
         query = db.query(PSSRQuestion).filter(PSSRQuestion.pssr_id == pssr_id)
-        if user_id:
-            query = query.filter(PSSRQuestion.assigned_user_id == user_id)
         if mandatory_only:
             query = query.filter(PSSRQuestion.mandatory.is_(True))
         return [
@@ -1676,34 +2031,76 @@ class PSSRWorkflowService:
     def _active_assignment_ids(db: Session, pssr_id: str) -> list[int]:
         assignments = db.query(PSSRTeamMemberAssignment).filter(PSSRTeamMemberAssignment.pssr_id == pssr_id).all()
         questions = db.query(PSSRQuestion.department_owner, PSSRQuestion.assigned_user_id).filter(PSSRQuestion.pssr_id == pssr_id).all()
-        punch_departments = [
-            row.owning_department
-            for row in db.query(AnnexurePunchPoint.owning_department).filter(AnnexurePunchPoint.pssr_id == pssr_id).all()
-            if row.owning_department
-        ]
         active_ids = []
         for assignment in assignments:
             owns_checkpoint = any(
-                question.assigned_user_id == assignment.user_id
-                and (
-                    PSSRWorkflowService._department_matches(assignment.department, question.department_owner)
-                    or PSSRWorkflowService._department_matches(question.department_owner, assignment.department)
-                )
+                PSSRWorkflowService._department_matches(assignment.department, question.department_owner)
+                or PSSRWorkflowService._department_matches(question.department_owner, assignment.department)
                 for question in questions
             )
-            owns_punch = any(
-                PSSRWorkflowService._department_matches(assignment.department, department)
-                or PSSRWorkflowService._department_matches(department, assignment.department)
-                for department in punch_departments
-            )
-            if owns_checkpoint or owns_punch:
+            if owns_checkpoint:
                 active_ids.append(assignment.id)
         return active_ids
 
     @staticmethod
+    def _department_progress(db: Session, pssr_id: str, assignments: list[PSSRTeamMemberAssignment]) -> list[dict]:
+        questions = db.query(PSSRQuestion).filter(PSSRQuestion.pssr_id == pssr_id).all()
+        responses = {
+            row.pssr_question_id: row.response
+            for row in db.query(PSSRQuestionResponse.pssr_question_id, PSSRQuestionResponse.response).filter(
+                PSSRQuestionResponse.pssr_id == pssr_id,
+            ).all()
+        }
+        punch_points = db.query(AnnexurePunchPoint).filter(AnnexurePunchPoint.pssr_id == pssr_id).all()
+        progress = []
+        for assignment in assignments:
+            department_questions = [
+                question
+                for question in questions
+                if PSSRWorkflowService._department_matches(assignment.department, question.department_owner)
+                or PSSRWorkflowService._department_matches(question.department_owner, assignment.department)
+            ]
+            department_punch_points = [
+                punch
+                for punch in punch_points
+                if PSSRWorkflowService._department_matches(assignment.department, punch.owning_department)
+                or PSSRWorkflowService._department_matches(punch.owning_department or "", assignment.department)
+            ]
+            answered = sum(
+                1
+                for question in department_questions
+                if responses.get(question.id) in {"YES", "NO", "NA"}
+            )
+            mandatory_pending = sum(
+                1
+                for question in department_questions
+                if question.mandatory and responses.get(question.id) not in {"YES", "NO", "NA"}
+            )
+            open_punch_points = sum(1 for punch in department_punch_points if punch.status in {"OPEN", "IN_PROGRESS"})
+            total = len(department_questions)
+            progress.append({
+                "department": assignment.department,
+                "assignment_id": assignment.id,
+                "user_id": assignment.user_id,
+                "status": "NOT_APPLICABLE" if total == 0 else assignment.status,
+                "total_questions": total,
+                "answered_questions": answered,
+                "pending_questions": max(total - answered, 0),
+                "mandatory_pending": mandatory_pending,
+                "open_punch_points": open_punch_points,
+                "completed": total == 0 or (mandatory_pending == 0 and assignment.status == "COMPLETED"),
+                "applicable": total > 0,
+            })
+        return progress
+
+    @staticmethod
     def _answers_editable(workflow: PSSRWorkflow) -> bool:
         state = normalize_state(workflow.workflow_state)
-        return state not in {UNDER_PREPARATION, PENDING_APPROVAL, APPROVED, CLOSED}
+        return state in RESPONSE_EDITABLE_STATES
+
+    @staticmethod
+    def _punch_points_editable(workflow: PSSRWorkflow) -> bool:
+        return normalize_state(workflow.workflow_state) != CLOSED
 
     @staticmethod
     def _open_punch_point_count(db: Session, pssr_id: str, department: Optional[str] = None) -> int:
@@ -1732,6 +2129,7 @@ class PSSRWorkflowService:
 
     @staticmethod
     def _department_work_ready_for_area_owner(db: Session, workflow: PSSRWorkflow) -> bool:
+        """Routing readiness is intentionally independent of open punch points."""
         active_assignment_ids = PSSRWorkflowService._active_assignment_ids(db, workflow.pssr_id)
         if not active_assignment_ids:
             return False
@@ -1741,8 +2139,6 @@ class PSSRWorkflowService:
             PSSRTeamMemberAssignment.status != "COMPLETED",
         ).scalar() or 0
         if incomplete_assignments:
-            return False
-        if PSSRWorkflowService._open_punch_point_count(db, workflow.pssr_id):
             return False
         for assignment in db.query(PSSRTeamMemberAssignment).filter(
             PSSRTeamMemberAssignment.pssr_id == workflow.pssr_id,
@@ -1811,8 +2207,7 @@ class PSSRWorkflowService:
                 PSSRTeamMemberAssignment.status == "COMPLETED",
             ).scalar() or 0
 
-        open_punch_points = PSSRWorkflowService._open_punch_point_count(db, workflow.pssr_id)
-        if state == COMPLETED_BY_TEAM and (not assignment_total or assignment_completed != assignment_total or open_punch_points):
+        if state == COMPLETED_BY_TEAM and (not assignment_total or assignment_completed != assignment_total):
             target_state = IN_PROGRESS
             workflow.completed_at = None
             workflow.completed_by_user_id = None
@@ -1820,7 +2215,6 @@ class PSSRWorkflowService:
         if (
             assignment_total
             and assignment_completed == assignment_total
-            and not open_punch_points
             and state != PENDING_APPROVAL
         ):
             target_state = COMPLETED_BY_TEAM

@@ -1,3 +1,12 @@
+export interface DashboardUserBrief {
+  id: number;
+  employee_id: string;
+  full_name: string;
+  email: string;
+  department?: string | null;
+  designation?: string | null;
+}
+
 export interface TeamDashboardTask {
   id: string;
   pssr_title: string;
@@ -12,7 +21,19 @@ export interface TeamDashboardTask {
   reviewer_name?: string | null;
   status?: 'Under Preparation' | 'To Do' | 'In Progress' | 'Completed' | null;
   workflow_state?: string | null;
-  ownership?: 'initiator' | 'team_leader' | 'assigned_member' | 'admin' | 'legacy' | null;
+  ownership?: 'initiator' | 'team_leader' | 'assigned_member' | 'admin' | 'legacy' | 'punch_point' | null;
+  punch_point_id?: number | null;
+  punch_point_title?: string | null;
+  punch_point_description?: string | null;
+  punch_checkpoint_question?: string | null;
+  punch_original_answer?: string | null;
+  punch_original_remarks?: string | null;
+  punch_annexure_name?: string | null;
+  punch_question_number?: number | null;
+  priority?: string | null;
+  raised_by?: DashboardUserBrief | null;
+  assigned_by?: DashboardUserBrief | null;
+  assigned_to?: DashboardUserBrief | null;
   can_start?: boolean;
 }
 
@@ -54,6 +75,7 @@ export interface TeamDashboardResponse {
   completed: TeamDashboardTask[];
   pending_review: TeamDashboardTask[];
   approved: TeamDashboardTask[];
+  assigned_punch_points?: TeamDashboardTask[];
   activity: TeamDashboardActivity[];
   stats: TeamDashboardStats;
   is_pssr_initiator: boolean;

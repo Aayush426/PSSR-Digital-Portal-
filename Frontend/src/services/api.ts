@@ -239,13 +239,29 @@ export interface PSSRWorkflowDetail {
       id: number;
       response: string;
       remarks?: string | null;
-      attachments: Array<Record<string, unknown>>;
+      attachments: CheckpointAttachment[];
       responded_by_user_id?: number | null;
+      responded_by?: { id: number; employee_id: string; full_name: string; email: string; department?: string | null; designation?: string | null } | null;
+      responded_by_department?: string | null;
       responded_at?: string | null;
+      updated_at?: string | null;
     } | null;
   }>;
+  department_progress?: Array<{
+    department: string;
+    assignment_id: number;
+    user_id: number;
+    status: string;
+    total_questions: number;
+    answered_questions: number;
+    pending_questions: number;
+    mandatory_pending: number;
+    open_punch_points: number;
+    completed: boolean;
+    applicable: boolean;
+  }>;
   annexures?: Array<{ id: number; code: string; title: string; revision: string; status: string; selected_at: string }>;
-  punch_points?: Array<{ id: number; title: string; description?: string | null; category: string; severity: string; status: string; owning_department: string; assigned_to_user_id?: number | null; assigned_to_user?: { id: number; employee_id: string; full_name: string; email: string; department?: string | null; designation?: string | null } | null; question_id?: number | null; workflow_reference?: string; due_date?: string | null; remarks?: string | null; created_at: string; updated_at?: string | null }>;
+  punch_points?: Array<{ id: number; title: string; description?: string | null; category: string; severity: string; status: string; owning_department: string; assigned_to_user_id?: number | null; assigned_to_user?: UserBrief | null; assigned_by_user_id?: number | null; assigned_by?: UserBrief | null; raised_by_user_id?: number | null; raised_by?: UserBrief | null; closed_by_user_id?: number | null; closed_by?: UserBrief | null; question_id?: number | null; checkpoint_id?: number | null; checkpoint_question?: string | null; checkpoint_description?: string | null; department?: string | null; annexure_name?: string | null; question_number?: number | null; original_answer?: string | null; original_remarks?: string | null; checkpoint_attachments?: CheckpointAttachment[]; workflow_reference?: string; pssr_number?: string | null; due_date?: string | null; remarks?: string | null; progress_remarks?: string | null; closure_remarks?: string | null; closure_evidence?: string | null; evidence_attachments?: PunchEvidenceAttachment[]; created_at: string; closed_at?: string | null; updated_at?: string | null }>;
   audit_timeline?: Array<{ id: number; action: string; summary: string; actor_user_id?: number | null; actor?: { id: number; employee_id: string; full_name: string; email: string; department?: string | null; designation?: string | null } | null; department?: string | null; metadata: Record<string, unknown>; created_at: string }>;
   permissions?: {
     is_admin: boolean;
@@ -258,9 +274,53 @@ export interface PSSRWorkflowDetail {
     can_complete_my_side?: boolean;
     can_finalize_department_work?: boolean;
     can_send_to_area_owner?: boolean;
+    routing_ready?: boolean;
     editable_departments: string[];
   };
 }
+
+export interface CheckpointAttachment {
+  id: number;
+  file_name: string;
+  attachment_name?: string;
+  content_type?: string;
+  size?: number;
+  checkpoint_id: number;
+  pssr_id: string;
+  uploaded_by_user_id: number;
+  uploader_employee_code?: string;
+  uploaded_by?: { id: number; employee_id: string; full_name: string; email: string; department?: string | null; designation?: string | null } | null;
+  uploaded_at?: string | null;
+  view_url?: string;
+  download_url?: string;
+}
+
+export interface UserBrief {
+  id: number;
+  employee_id: string;
+  full_name: string;
+  email: string;
+  department?: string | null;
+  designation?: string | null;
+  role?: string | null;
+}
+
+export interface PunchEvidenceAttachment {
+  id: number;
+  file_name: string;
+  content_type?: string;
+  size?: number;
+  punch_point_id: number;
+  pssr_id: string;
+  uploaded_by_user_id: number;
+  uploader_employee_code?: string;
+  uploaded_by?: UserBrief | null;
+  uploaded_at?: string | null;
+  view_url?: string;
+  download_url?: string;
+}
+
+export type CheckpointAttachmentPayload = Record<string, unknown> | CheckpointAttachment;
 
 export interface DepartmentAnnexure {
   id: number;
@@ -545,11 +605,58 @@ export const api = {
     });
   },
 
-  respondToPSSRQuestion(pssrId: string, questionId: number, payload: { response: 'YES' | 'NO' | 'NA' | 'PENDING'; remarks?: string | null; attachments?: Array<Record<string, unknown>> }): Promise<NonNullable<PSSRWorkflowDetail['questions']>[number]> {
+  respondToPSSRQuestion(pssrId: string, questionId: number, payload: { response: 'YES' | 'NO' | 'NA' | 'PENDING'; remarks?: string | null; attachments?: CheckpointAttachmentPayload[] }): Promise<NonNullable<PSSRWorkflowDetail['questions']>[number]> {
     return apiRequest<NonNullable<PSSRWorkflowDetail['questions']>[number]>(`/pssr/${encodeURIComponent(pssrId)}/questions/${questionId}/respond`, {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+  },
+
+  uploadCheckpointAttachment(pssrId: string, questionId: number, file: File): Promise<CheckpointAttachment> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return apiRequest<CheckpointAttachment>(`/pssr/${encodeURIComponent(pssrId)}/questions/${questionId}/attachment`, {
+      method: 'POST',
+      body: formData,
+    });
+  },
+
+  async downloadCheckpointAttachment(pssrId: string, attachmentId: number, fileName: string): Promise<void> {
+    const token = tokenStore.getToken();
+    const headers = new Headers();
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    const response = await fetch(`${API_BASE_URL}/pssr/${encodeURIComponent(pssrId)}/attachments/${attachmentId}/download`, { headers });
+    if (!response.ok) throw new Error('Unable to download checkpoint attachment.');
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
+  async viewCheckpointAttachment(pssrId: string, attachmentId: number): Promise<void> {
+    const token = tokenStore.getToken();
+    const headers = new Headers();
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    const previewWindow = window.open('', '_blank', 'noopener,noreferrer');
+    const response = await fetch(`${API_BASE_URL}/pssr/${encodeURIComponent(pssrId)}/attachments/${attachmentId}/view`, { headers });
+    if (!response.ok) {
+      previewWindow?.close();
+      throw new Error('Unable to view checkpoint attachment.');
+    }
+    const blob = await response.blob();
+    const typedBlob = new Blob([blob], { type: response.headers.get('Content-Type') ?? blob.type });
+    const url = window.URL.createObjectURL(typedBlob);
+    if (previewWindow) {
+      previewWindow.location.href = url;
+    } else {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+    window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
   },
 
   transitionPSSR(pssrId: string, targetState: 'PENDING_AREA_OWNER_APPROVAL' | 'APPROVED' | 'REJECTED' | 'CLOSED', remarks?: string | null, areaOwnerUserId?: number | null): Promise<PSSRWorkflowDetail> {
@@ -580,18 +687,58 @@ export const api = {
     });
   },
 
-  createPSSRPunchPoint(pssrId: string, payload: { title: string; description: string; category: 'A' | 'B' | 'C'; owning_department: string; assigned_to_user_id?: number | null; due_date?: string | null; closure_remarks?: string | null; status?: 'OPEN' | 'IN_PROGRESS' | 'CLOSED'; question_id?: number | null }): Promise<NonNullable<PSSRWorkflowDetail['punch_points']>[number]> {
+  createPSSRPunchPoint(pssrId: string, payload: { title: string; description: string; category: 'A' | 'B' | 'C'; owning_department: string; assigned_to_user_id?: number | null; due_date?: string | null; progress_remarks?: string | null; closure_remarks?: string | null; closure_evidence?: string | null; status?: 'OPEN' | 'IN_PROGRESS' | 'CLOSED'; question_id?: number | null }): Promise<NonNullable<PSSRWorkflowDetail['punch_points']>[number]> {
     return apiRequest<NonNullable<PSSRWorkflowDetail['punch_points']>[number]>(`/pssr/${encodeURIComponent(pssrId)}/punch-points`, {
       method: 'POST',
       body: JSON.stringify(payload),
     });
   },
 
-  updatePSSRPunchPoint(pssrId: string, punchPointId: number, payload: { title: string; description: string; category: 'A' | 'B' | 'C'; owning_department: string; assigned_to_user_id?: number | null; due_date?: string | null; closure_remarks?: string | null; status?: 'OPEN' | 'IN_PROGRESS' | 'CLOSED'; question_id?: number | null }): Promise<NonNullable<PSSRWorkflowDetail['punch_points']>[number]> {
+  updatePSSRPunchPoint(pssrId: string, punchPointId: number, payload: { title: string; description: string; category: 'A' | 'B' | 'C'; owning_department: string; assigned_to_user_id?: number | null; due_date?: string | null; progress_remarks?: string | null; closure_remarks?: string | null; closure_evidence?: string | null; status?: 'OPEN' | 'IN_PROGRESS' | 'CLOSED'; question_id?: number | null }): Promise<NonNullable<PSSRWorkflowDetail['punch_points']>[number]> {
     return apiRequest<NonNullable<PSSRWorkflowDetail['punch_points']>[number]>(`/pssr/${encodeURIComponent(pssrId)}/punch-points/${punchPointId}`, {
       method: 'PATCH',
       body: JSON.stringify(payload),
     });
+  },
+
+  uploadPunchEvidence(pssrId: string, punchPointId: number, file: File): Promise<PunchEvidenceAttachment> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return apiRequest<PunchEvidenceAttachment>(`/pssr/${encodeURIComponent(pssrId)}/punch-points/${punchPointId}/evidence`, { method: 'POST', body: formData });
+  },
+
+  async downloadPunchEvidence(pssrId: string, punchPointId: number, evidenceId: number, fileName: string): Promise<void> {
+    const token = tokenStore.getToken();
+    const headers = new Headers();
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    const response = await fetch(`${API_BASE_URL}/pssr/${encodeURIComponent(pssrId)}/punch-points/${punchPointId}/evidence/${evidenceId}/download`, { headers });
+    if (!response.ok) throw new Error('Unable to download punch point evidence.');
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
+  async viewPunchEvidence(pssrId: string, punchPointId: number, evidenceId: number): Promise<void> {
+    const token = tokenStore.getToken();
+    const headers = new Headers();
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    const previewWindow = window.open('', '_blank', 'noopener,noreferrer');
+    const response = await fetch(`${API_BASE_URL}/pssr/${encodeURIComponent(pssrId)}/punch-points/${punchPointId}/evidence/${evidenceId}/view`, { headers });
+    if (!response.ok) {
+      previewWindow?.close();
+      throw new Error('Unable to view punch point evidence.');
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(new Blob([blob], { type: response.headers.get('Content-Type') ?? blob.type }));
+    if (previewWindow) previewWindow.location.href = url;
+    else window.open(url, '_blank', 'noopener,noreferrer');
+    window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
   },
 
   listInitiators(params: { page?: number; limit?: number; active?: boolean; department?: string; search?: string } = {}): Promise<InitiatorCapabilitiesResponse> {

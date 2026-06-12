@@ -22,7 +22,19 @@ class TeamDashboardTask(BaseModel):
     area_owner: Optional[dict] = None
     status: Optional[Literal["Under Preparation", "To Do", "In Progress", "Completed"]] = None
     workflow_state: Optional[str] = None
-    ownership: Optional[Literal["initiator", "team_leader", "assigned_member", "admin", "legacy"]] = None
+    ownership: Optional[Literal["initiator", "team_leader", "assigned_member", "admin", "legacy", "punch_point"]] = None
+    punch_point_id: Optional[int] = None
+    punch_point_title: Optional[str] = None
+    punch_point_description: Optional[str] = None
+    punch_checkpoint_question: Optional[str] = None
+    punch_original_answer: Optional[str] = None
+    punch_original_remarks: Optional[str] = None
+    punch_annexure_name: Optional[str] = None
+    punch_question_number: Optional[int] = None
+    priority: Optional[str] = None
+    raised_by: Optional[dict] = None
+    assigned_by: Optional[dict] = None
+    assigned_to: Optional[dict] = None
     can_start: bool = False
 
 
@@ -51,6 +63,7 @@ class TeamDashboardResponse(BaseModel):
     completed: List[TeamDashboardTask]
     pending_review: List[TeamDashboardTask] = []
     approved: List[TeamDashboardTask] = []
+    assigned_punch_points: List[TeamDashboardTask] = []
     activity: List[TeamDashboardActivity]
     stats: TeamDashboardStats
     is_pssr_initiator: bool = False

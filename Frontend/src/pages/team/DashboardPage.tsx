@@ -113,6 +113,8 @@ const PSSR_DEPARTMENTS: DepartmentName[] = [
   'Others',
 ];
 
+const SELECT_FIELD_CLASS = 'rounded border border-outline-variant bg-surface-container-lowest px-3 text-body-sm text-on-surface outline-none focus:border-primary disabled:bg-surface-container-low disabled:text-on-surface-variant disabled:opacity-60 [&_option]:bg-surface-container-lowest [&_option]:text-on-surface';
+
 const defaultPSSRForm = (): PSSRFormState => ({
   plantUnit: '',
   date: new Date().toISOString().slice(0, 10),
@@ -2248,7 +2250,7 @@ const PSSRDetailsPanel: React.FC<{ pssrId: string; onClose: () => void }> = ({ p
                 </div>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr]">
                   <input value={areaOwnerSearch} onChange={(event) => setAreaOwnerSearch(event.target.value)} placeholder="Search area owners" className="h-10 rounded border border-outline-variant bg-transparent px-3 text-body-sm outline-none" />
-                  <select value={areaOwnerId} onChange={(event) => setAreaOwnerId(event.target.value)} className="h-10 rounded border border-outline-variant bg-transparent px-3 text-body-sm">
+                  <select value={areaOwnerId} onChange={(event) => setAreaOwnerId(event.target.value)} className={`h-10 ${SELECT_FIELD_CLASS}`}>
                     <option value="">Select area owner</option>
                     {(areaOwnerDirectory.data?.records ?? []).map((owner) => <option key={owner.id} value={owner.id}>{memberOptionLabel(owner)}</option>)}
                   </select>
@@ -2301,7 +2303,7 @@ const PSSRDetailsPanel: React.FC<{ pssrId: string; onClose: () => void }> = ({ p
                               disabled={!canEditPunchlist || punchMutation.isPending}
                               value={draft.category ?? point?.category ?? (question.mandatory ? 'A' : 'B')}
                               onChange={(event) => draftPunchForQuestion(question, { category: event.target.value as 'A' | 'B' | 'C' })}
-                              className="h-10 rounded border border-outline-variant bg-transparent px-3 text-body-sm outline-none disabled:opacity-60"
+                              className={`h-10 ${SELECT_FIELD_CLASS}`}
                             >
                               <option value="A">Category A</option>
                               <option value="B">Category B</option>
@@ -2332,7 +2334,7 @@ const PSSRDetailsPanel: React.FC<{ pssrId: string; onClose: () => void }> = ({ p
                               disabled={!canUpdateThisPunch || punchMutation.isPending || !point}
                               value={draft.status ?? point?.status ?? 'OPEN'}
                               onChange={(event) => draftPunchForQuestion(question, { status: event.target.value as 'OPEN' | 'IN_PROGRESS' | 'CLOSED' })}
-                              className="h-10 rounded border border-outline-variant bg-transparent px-3 text-body-sm font-bold outline-none disabled:opacity-60"
+                              className={`h-10 font-bold ${SELECT_FIELD_CLASS}`}
                             >
                               <option value="OPEN">Open</option>
                               <option value="IN_PROGRESS">In Progress</option>
@@ -2412,7 +2414,7 @@ const PSSRDetailsPanel: React.FC<{ pssrId: string; onClose: () => void }> = ({ p
                       </div>
                       {canAnswer ? (
                         <div className="mt-3 grid grid-cols-1 md:grid-cols-[140px_1fr_180px_auto] gap-2">
-                          <select value={draft.response} onChange={(event) => updateDraft(question.id, { response: event.target.value as 'YES' | 'NO' | 'NA' | 'PENDING' })} className="h-10 rounded border border-outline-variant bg-transparent px-3 text-body-sm outline-none">
+                          <select value={draft.response} onChange={(event) => updateDraft(question.id, { response: event.target.value as 'YES' | 'NO' | 'NA' | 'PENDING' })} className={`h-10 ${SELECT_FIELD_CLASS}`}>
                             {['PENDING', 'YES', 'NO', 'NA'].map((item) => <option key={item} value={item}>{item}</option>)}
                           </select>
                           <input value={draft.remarks} onChange={(event) => updateDraft(question.id, { remarks: event.target.value })} placeholder="Remarks or evidence reference" className="h-10 rounded border border-outline-variant bg-transparent px-3 text-body-sm outline-none" />
@@ -2753,11 +2755,11 @@ const PSSREditWorkspace: React.FC<{ pssr: PSSRWorkflowDetail; onClose: () => voi
             </div>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_1fr]">
               <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search leader or department members" className="h-10 w-full min-w-0 rounded border border-outline-variant bg-transparent px-3 text-body-sm outline-none" />
-              <select value={teamLeaderId} onChange={(event) => setTeamLeaderId(event.target.value)} className="h-10 w-full min-w-0 rounded border border-outline-variant bg-transparent px-3 text-body-sm">
+              <select value={teamLeaderId} onChange={(event) => setTeamLeaderId(event.target.value)} className={`h-10 w-full min-w-0 ${SELECT_FIELD_CLASS}`}>
                 <option value="">Select team leader</option>
                 {teamMembers.map((user) => <option key={user.id} value={user.id}>{memberOptionLabel(user)}</option>)}
               </select>
-              <select value={areaOwnerId} onChange={(event) => setAreaOwnerId(event.target.value)} className="h-10 w-full min-w-0 rounded border border-outline-variant bg-transparent px-3 text-body-sm">
+              <select value={areaOwnerId} onChange={(event) => setAreaOwnerId(event.target.value)} className={`h-10 w-full min-w-0 ${SELECT_FIELD_CLASS}`}>
                 <option value="">Select area owner</option>
                 {areaOwners.map((user) => <option key={user.id} value={user.id}>{memberOptionLabel(user)}</option>)}
               </select>
@@ -2782,7 +2784,7 @@ const PSSREditWorkspace: React.FC<{ pssr: PSSRWorkflowDetail; onClose: () => voi
                     {index < PSSR_DEPARTMENTS.length ? (
                       <p className="text-label-sm font-black uppercase text-on-surface">{assignment.department}</p>
                     ) : (
-                      <select value={assignment.department} onChange={(event) => updateAssignment(index, { department: event.target.value })} className="h-8 rounded border border-outline-variant bg-transparent px-2 text-label-sm font-bold">
+                      <select value={assignment.department} onChange={(event) => updateAssignment(index, { department: event.target.value })} className={`h-8 px-2 text-label-sm font-bold ${SELECT_FIELD_CLASS}`}>
                         <option value="">Select department</option>
                         {PSSR_DEPARTMENTS.map((department) => <option key={department} value={department}>{department}</option>)}
                       </select>
@@ -2790,7 +2792,7 @@ const PSSREditWorkspace: React.FC<{ pssr: PSSRWorkflowDetail; onClose: () => voi
                     {!assignment.userId && <span className="rounded bg-surface-container px-2 py-1 text-[10px] font-black uppercase text-outline">Unassigned</span>}
                   </div>
                   <div className="overflow-x-auto">
-                    <div className="grid min-w-[960px] grid-cols-[minmax(360px,1fr)_120px_170px_280px] gap-2 px-3 py-2 text-[10px] font-black uppercase text-outline">
+                    <div className="grid min-w-[960px] grid-cols-[minmax(360px,1fr)_150px_170px_280px] gap-2 px-3 py-2 text-[10px] font-black uppercase text-outline">
                       <span>Member selector</span>
                       <span>Code</span>
                       <span>Designation</span>
@@ -2824,9 +2826,9 @@ const PSSREditWorkspace: React.FC<{ pssr: PSSRWorkflowDetail; onClose: () => voi
                 <div key={question.id ?? `new-${index}`} className="rounded border border-outline-variant p-3">
                   <div className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_180px_180px_220px_auto]">
                     <input value={question.questionText} onChange={(event) => setQuestions((current) => current.map((item, idx) => idx === index ? { ...item, questionText: event.target.value } : item))} className="h-10 rounded border border-outline-variant bg-transparent px-3 text-body-sm" placeholder="Checkpoint text" />
-                    <select value={question.checkpointType} onChange={(event) => setQuestions((current) => current.map((item, idx) => idx === index ? { ...item, checkpointType: event.target.value as CheckpointType } : item))} className="h-10 rounded border border-outline-variant bg-transparent px-3 text-body-sm"><option value="FIELD">Field</option><option value="DOCUMENT">Document</option></select>
-                    <select value={question.departmentOwner} onChange={(event) => setQuestions((current) => current.map((item, idx) => idx === index ? { ...item, departmentOwner: event.target.value, assignedUserId: assignments.find((assignment) => assignment.department === event.target.value)?.userId ?? '' } : item))} className="h-10 rounded border border-outline-variant bg-transparent px-3 text-body-sm">{PSSR_DEPARTMENTS.map((department) => <option key={department} value={department}>{department}</option>)}</select>
-                    <select value={question.assignedUserId} onChange={(event) => setQuestions((current) => current.map((item, idx) => idx === index ? { ...item, assignedUserId: event.target.value } : item))} className="h-10 rounded border border-outline-variant bg-transparent px-3 text-body-sm"><option value="">Auto from department</option>{assignments.filter((assignment) => assignment.department === question.departmentOwner).map((assignment) => <option key={assignment.userId} value={assignment.userId}>{knownUsers.find((user) => String(user.id) === assignment.userId)?.full_name ?? `User ${assignment.userId}`}</option>)}</select>
+                    <select value={question.checkpointType} onChange={(event) => setQuestions((current) => current.map((item, idx) => idx === index ? { ...item, checkpointType: event.target.value as CheckpointType } : item))} className={`h-10 ${SELECT_FIELD_CLASS}`}><option value="FIELD">Field</option><option value="DOCUMENT">Document</option></select>
+                    <select value={question.departmentOwner} onChange={(event) => setQuestions((current) => current.map((item, idx) => idx === index ? { ...item, departmentOwner: event.target.value, assignedUserId: assignments.find((assignment) => assignment.department === event.target.value)?.userId ?? '' } : item))} className={`h-10 ${SELECT_FIELD_CLASS}`}>{PSSR_DEPARTMENTS.map((department) => <option key={department} value={department}>{department}</option>)}</select>
+                    <select value={question.assignedUserId} onChange={(event) => setQuestions((current) => current.map((item, idx) => idx === index ? { ...item, assignedUserId: event.target.value } : item))} className={`h-10 ${SELECT_FIELD_CLASS}`}><option value="">Auto from department</option>{assignments.filter((assignment) => assignment.department === question.departmentOwner).map((assignment) => <option key={assignment.userId} value={assignment.userId}>{knownUsers.find((user) => String(user.id) === assignment.userId)?.full_name ?? `User ${assignment.userId}`}</option>)}</select>
                     <button onClick={() => setQuestions((current) => current.filter((_, idx) => idx !== index))} className="rounded border border-outline-variant px-3 text-label-sm font-black text-error">Delete</button>
                   </div>
                   <textarea value={question.description} onChange={(event) => setQuestions((current) => current.map((item, idx) => idx === index ? { ...item, description: event.target.value } : item))} placeholder="Description / evidence expectations" className="mt-2 min-h-16 w-full rounded border border-outline-variant bg-transparent px-3 py-2 text-body-sm" />
@@ -2910,7 +2912,7 @@ const PunchAssigneeSelect: React.FC<{
         disabled={disabled || usersQuery.isLoading}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-10 rounded border border-outline-variant bg-transparent px-3 text-body-sm outline-none disabled:opacity-60"
+        className={`h-10 ${SELECT_FIELD_CLASS}`}
       >
         <option value="">Unassigned</option>
         {users.map((member) => <option key={member.id} value={member.id}>{memberOptionLabel(member)}</option>)}
@@ -2966,7 +2968,7 @@ const AssignedPunchPointRow: React.FC<{
         </div>
         <label className="block">
           <span className="text-[10px] font-black uppercase text-outline">Category</span>
-          <select disabled={!canEditAssignment || busy} value={category} onChange={(event) => setCategory(event.target.value as 'A' | 'B' | 'C')} className="mt-1 h-10 w-full rounded border border-outline-variant bg-transparent px-3 text-body-sm disabled:opacity-60">
+          <select disabled={!canEditAssignment || busy} value={category} onChange={(event) => setCategory(event.target.value as 'A' | 'B' | 'C')} className={`mt-1 h-10 w-full ${SELECT_FIELD_CLASS}`}>
             <option value="A">A</option>
             <option value="B">B</option>
             <option value="C">C</option>
@@ -3023,7 +3025,7 @@ const AssignedPunchPointRow: React.FC<{
       </div>
       {!canEditAssignment && canUpdate && (
         <div className="grid grid-cols-1 gap-2 border-t border-outline-variant pt-3 md:grid-cols-[150px_1fr_1fr_auto]">
-          <select disabled={busy} value={status} onChange={(event) => setStatus(event.target.value as 'OPEN' | 'IN_PROGRESS' | 'CLOSED')} className="h-9 rounded border border-outline-variant bg-transparent px-2 text-body-sm disabled:opacity-60">
+          <select disabled={busy} value={status} onChange={(event) => setStatus(event.target.value as 'OPEN' | 'IN_PROGRESS' | 'CLOSED')} className={`h-9 px-2 ${SELECT_FIELD_CLASS}`}>
             <option value="OPEN">Open</option>
             <option value="IN_PROGRESS">In Progress</option>
             <option value="CLOSED">Closed</option>
@@ -3080,10 +3082,10 @@ const EditAssignmentRow: React.FC<{
   const users = usersQuery.data?.records ?? [];
   const selectedUser = users.find((user) => String(user.id) === assignment.userId);
   return (
-    <div className={`grid min-w-[960px] grid-cols-[minmax(360px,1fr)_120px_170px_280px] items-center gap-2 px-3 pb-2 ${assignment.userId ? '' : 'text-on-surface-variant'}`}>
+    <div className={`grid min-w-[960px] grid-cols-[minmax(360px,1fr)_150px_170px_280px] items-start gap-2 px-3 pt-1 pb-2 ${assignment.userId ? '' : 'text-on-surface-variant'}`}>
       <div className="space-y-1">
         <input disabled={!assignment.department} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, code, department, designation" className="h-9 w-full rounded border border-outline-variant bg-transparent px-3 text-body-sm outline-none disabled:opacity-60" />
-        <select disabled={!assignment.department || usersQuery.isLoading} value={assignment.userId} onChange={(event) => onChange(index, { userId: event.target.value })} className={`h-9 min-w-0 rounded border border-outline-variant px-3 text-body-sm outline-none disabled:opacity-60 ${assignment.userId ? 'bg-transparent text-on-surface' : 'bg-surface-container-low text-on-surface-variant'}`}>
+        <select disabled={!assignment.department || usersQuery.isLoading} value={assignment.userId} onChange={(event) => onChange(index, { userId: event.target.value })} className={`h-9 min-w-0 ${SELECT_FIELD_CLASS} ${assignment.userId ? '' : 'text-on-surface-variant'}`}>
           <option value="">{assignment.department ? 'Select filtered member' : 'Select department first'}</option>
           {users.map((user) => <option key={user.id} value={user.id}>{memberOptionLabel(user)}</option>)}
         </select>

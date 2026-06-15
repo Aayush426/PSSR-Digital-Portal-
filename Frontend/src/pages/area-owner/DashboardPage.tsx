@@ -579,7 +579,7 @@ const AreaOwnerPunchPointRow: React.FC<{
 
   return (
     <div className="space-y-3 px-4 py-4 text-body-sm">
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(220px,1fr)_130px_170px_minmax(220px,280px)_auto] lg:items-end">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(220px,1fr)_150px_170px_minmax(220px,280px)_auto] lg:items-start pt-1">
         <div>
           <p className="text-[10px] font-black uppercase text-primary">Punch Point</p>
           <p className="mt-1 font-black text-on-surface">{point.title}</p>
@@ -587,7 +587,7 @@ const AreaOwnerPunchPointRow: React.FC<{
         </div>
         <label className="block">
           <span className="text-[10px] font-black uppercase text-outline">Category</span>
-          <select disabled={busy} value={category} onChange={(event) => setCategory(event.target.value as 'A' | 'B' | 'C')} className="mt-1 h-10 w-full rounded border border-outline-variant bg-transparent px-3 text-body-sm disabled:opacity-60">
+          <select disabled={busy} value={category} onChange={(event) => setCategory(event.target.value as 'A' | 'B' | 'C')} className="mt-1 h-10 w-full rounded border border-outline-variant bg-surface-container-lowest px-3 text-body-sm text-on-surface outline-none focus:border-primary disabled:opacity-60">
             <option value="A">A</option>
             <option value="B">B</option>
             <option value="C">C</option>
@@ -599,8 +599,8 @@ const AreaOwnerPunchPointRow: React.FC<{
         </label>
         <div className="grid grid-cols-1 gap-1">
           <span className="text-[10px] font-black uppercase text-outline">Assign To</span>
-          <input disabled={busy} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search team member" className="h-8 rounded border border-outline-variant bg-transparent px-2 text-label-sm disabled:opacity-60" />
-          <select disabled={busy || directory.isLoading} value={assigneeId} onChange={(event) => setAssigneeId(event.target.value)} className="h-10 rounded border border-outline-variant bg-transparent px-3 text-body-sm disabled:opacity-60">
+          <input disabled={busy} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search team member" className="h-8 w-full rounded border border-outline-variant bg-surface-container-lowest px-3 text-body-sm text-on-surface outline-none focus:border-primary disabled:opacity-60" />
+          <select disabled={busy || directory.isLoading} value={assigneeId} onChange={(event) => setAssigneeId(event.target.value)} className="h-10 w-full rounded border border-outline-variant bg-surface-container-lowest px-3 text-body-sm text-on-surface outline-none focus:border-primary disabled:opacity-60">
             <option value="">Unassigned</option>
             {users.map((user) => user && <option key={user.id} value={user.id}>{user.full_name} | {user.employee_id} | {user.designation ?? 'No designation'}</option>)}
           </select>
@@ -635,7 +635,7 @@ const AreaOwnerPunchPointRow: React.FC<{
       <div className="grid grid-cols-1 gap-2 border-t border-outline-variant pt-3 md:grid-cols-[160px_1fr_1fr]">
         <label className="block">
           <span className="text-[10px] font-black uppercase text-outline">Status</span>
-          <select disabled={busy} value={status} onChange={(event) => setStatus(event.target.value as 'OPEN' | 'IN_PROGRESS' | 'CLOSED')} className="mt-1 h-10 w-full rounded border border-outline-variant bg-transparent px-3 text-body-sm disabled:opacity-60">
+          <select disabled={busy} value={status} onChange={(event) => setStatus(event.target.value as 'OPEN' | 'IN_PROGRESS' | 'CLOSED')} className="mt-1 h-10 w-full rounded border border-outline-variant bg-surface-container-lowest px-3 text-body-sm text-on-surface outline-none focus:border-primary disabled:opacity-60">
             <option value="OPEN">Open</option>
             <option value="IN_PROGRESS">In Progress</option>
             <option value="CLOSED">Closed</option>
